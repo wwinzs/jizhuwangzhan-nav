@@ -284,3 +284,14 @@ footer{display:none}
   .section-title h2{font-size:11px}
 }
 @media(prefers-reduced-motion:reduce){.tile,.group-row{transition:none!important}}
+
+/* 触屏设备仅常驻单个编辑入口，避免图标上方密集显示收藏和更多按钮。 */
+.tile-menu button{opacity:0}
+@media(hover:hover){
+  .tile:hover .tile-menu button,.tile:focus-within .tile-menu button{opacity:1}
+}
+@media(hover:none){
+  .tile-menu button{opacity:0}
+  .tile-menu button:last-child{opacity:.72}
+  .tile:focus-within .tile-menu button{opacity:1}
+}
