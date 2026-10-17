@@ -41,6 +41,10 @@ jobs:
           if (left !== right || !left) throw new Error('Unbalanced CSS braces');
           console.log('Desktop layout stylesheet contract OK');
           NODE
+      - name: Install CJK font for screenshot rendering
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq fonts-wqy-microhei > /dev/null
       - name: Capture desktop and mobile layouts
         run: |
           set -eu
