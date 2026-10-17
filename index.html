@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#101a30">
+  <meta name="description" content="记住网站 · 一个轻盈自由的个人导航主页">
+  <title>记住网站 · 我的导航</title>
+  <link rel="icon" href="./favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="./style.css">
+  <script src="./app.js" defer></script>
+</head>
+<body>
+  <div id="app" class="app">
+    <div class="backdrop"></div>
+    <aside id="sidebar" class="sidebar">
+      <div class="brand"><div class="brand-mark">✦</div><div><strong>记住网站</strong><small>PERSONAL START PAGE</small></div><button id="closeSidebar" class="mobile-close" aria-label="关闭菜单">×</button></div>
+      <div class="side-caption">个人空间</div>
+      <nav id="groupNav" class="group-nav" aria-label="网站分类"></nav>
+      <button id="addGroup" class="sidebar-add">＋ 新建分类</button>
+      <div class="side-bottom"><div class="sidebar-quote"><span>✧</span><strong>收藏每一个灵感</strong><p>让常用的网站，始终触手可及。</p></div><button id="openSettings" class="sidebar-settings">⚙ 个性化设置 <span>›</span></button></div>
+    </aside>
+    <div id="mobileScrim" class="mobile-scrim" hidden></div>
+    <main class="main">
+      <header class="topbar"><div class="top-left"><button id="menu" class="icon-button mobile-menu" aria-label="打开菜单">☰</button><span class="online-dot"></span><span>你的专属数字空间</span></div><div class="top-actions"><button id="focusButton" class="top-btn">◉ <span>专注模式</span></button><button id="settingsButton" class="top-btn">⚙ <span>设置</span></button><button id="newLinkTop" class="primary-btn">＋ <span>添加网站</span></button></div></header>
+      <div class="content">
+        <section class="hero">
+          <div class="hero-eyebrow">✦ &nbsp; YOUR PERSONAL START PAGE</div>
+          <div id="clock" class="clock" aria-live="off">00<span>:</span>00</div>
+          <div id="date" class="hero-date"></div><p id="greeting" class="greeting">开启新的一天</p>
+          <form id="searchForm" class="search-form" role="search"><label class="engine-wrap"><select id="engine" aria-label="搜索引擎"><option value="baidu">百度</option><option value="bing">必应</option><option value="google">Google</option></select></label><div class="search-divider"></div><input id="searchInput" aria-label="搜索网络" type="search" placeholder="搜索你感兴趣的内容…" autocomplete="off"><kbd>Ctrl K</kbd><button type="submit" class="search-go" aria-label="开始搜索">⌕</button></form>
+          <div class="hero-hint">✧ &nbsp; 从一个好问题开始，探索更大的世界</div>
+        </section>
+        <section id="widgets" class="widgets">
+          <article class="widget quote-widget"><div class="widget-label">☾ &nbsp; 今日灵感</div><div class="quote-mark">“</div><h2>生活不在别处，<br>此刻即是全部。</h2><p>让每个平凡的日子，都闪闪发光。</p><div class="quote-foot">GOOD DAY, GOOD MOOD <span>↗</span></div></article>
+          <article class="widget calendar-widget"><div class="widget-label">▦ &nbsp; 轻日历 <div class="month-nav"><button id="prevMonth" aria-label="上个月">‹</button><button id="nextMonth" aria-label="下个月">›</button></div></div><div class="month-heading"><strong id="monthTitle"></strong><button id="today">今天</button></div><div id="calendar" class="calendar"></div></article>
+          <article class="widget note-widget"><div class="widget-label">✎ &nbsp; 随手记 <span class="autosave">● 自动保存</span></div><textarea id="notes" maxlength="10000" aria-label="随手记" placeholder="此刻有什么想记下的？"></textarea><div class="note-footer">记下灵感，也记下美好 <span id="noteCount">0 / 10000</span></div></article>
+        </section>
+        <section id="linksSection" class="links-section">
+          <div class="section-toolbar"><div class="section-title"><span class="section-icon">▦</span><div><h2 id="sectionName">全部站点</h2><p>你喜欢的，都在这里</p></div></div><div class="toolbar-actions"><input id="filter" type="search" placeholder="⌕ 查找网站" aria-label="查找网站"><button id="sortMode" class="subtle-btn" title="拖动卡片排序">⇅ 排序</button><button id="addLink" class="subtle-btn">＋ 添加</button></div></div>
+          <div id="tiles" class="tiles"></div><div id="empty" class="empty" hidden>这里还没有网站，点击「添加」开始收藏吧。</div>
+        </section>
+      </div>
+      <footer>记住网站 · 让喜欢的网站触手可及 <span>✦</span> <small>Personal Navigation</small></footer>
+    </main>
+  </div>
+  <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
+  <dialog id="editDialog" class="dialog"><form id="editForm" class="dialog-inner" method="dialog"><div class="dialog-head"><div><small>QUICK ACCESS</small><h2 id="dialogTitle">添加网站</h2></div><button id="editClose" type="button" class="close">×</button></div><label>网站名称<input id="linkName" required maxlength="40" placeholder="例如：我的博客"></label><label>网站地址<input id="linkUrl" required maxlength="2048" placeholder="https://example.com"></label><div class="two-cols"><label>所属分类<select id="linkGroup"></select></label><label>图标字符<input id="linkIcon" maxlength="4" placeholder="✦"></label></div><label>图标颜色<input id="linkColor" type="color" value="#708cfc"></label><label class="checkbox-line"><input id="linkFav" type="checkbox"> 加入我的常用</label><div id="editError" class="form-error" role="alert"></div><div class="dialog-actions"><button id="deleteLink" type="button" class="danger" hidden>删除</button><button id="cancelEdit" type="button" class="ghost">取消</button><button type="submit" class="primary-btn">保存网站</button></div></form></dialog>
+  <dialog id="settingsDialog" class="dialog settings-dialog"><div class="settings-inner"><div class="dialog-head"><div><small>PERSONALIZE YOUR SPACE</small><h2>个性化设置</h2></div><button id="settingsClose" class="close" aria-label="关闭设置">×</button></div><div class="settings-scroll"><section class="setting-section"><h3>☼ 主题外观</h3><p>切换喜欢的桌面主题</p><div id="themeButtons" class="choice-row"><button data-theme="dark">深色</button><button data-theme="light">浅色</button></div></section><section class="setting-section"><h3>✧ 桌面壁纸</h3><p>选择一套内置壁纸，或上传自己的图片</p><div id="wallpaperButtons" class="wallpaper-options"><button data-wallpaper="aurora">极光蓝</button><button data-wallpaper="dusk">落日橙</button><button data-wallpaper="ocean">海洋蓝</button><button data-wallpaper="forest">森系绿</button><button data-wallpaper="night">午夜紫</button></div><label class="upload-btn">↑ 上传壁纸（≤2 MB）<input id="wallpaperUpload" type="file" accept="image/png,image/jpeg,image/webp" hidden></label></section><section class="setting-section"><h3>▦ 桌面显示</h3><label class="checkbox-line"><input id="showWidgets" type="checkbox" checked> 显示桌面小组件</label><label class="checkbox-line"><input id="compact" type="checkbox"> 紧凑排列图标</label></section><section class="setting-section"><h3>⚙ 分类管理</h3><div id="groupManager"></div><button id="manageAddGroup" class="ghost">＋ 新增分类</button></section><section class="setting-section"><h3>⇪ 数据备份</h3><p>数据保存在当前浏览器，不会自动跨设备同步。</p><div class="settings-actions"><button id="export" class="ghost">↓ 导出 JSON</button><label class="upload-btn">↑ 导入 JSON<input id="import" type="file" accept=".json,application/json" hidden></label></div><button id="reset" class="reset-btn">恢复全部默认设置</button></section></div></div></dialog>
+</body>
+</html>
