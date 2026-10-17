@@ -158,6 +158,7 @@
     var s = state.data.settings, app = $('app');
     app.dataset.theme = s.theme; app.dataset.wallpaper = s.wallpaper;
     app.classList.toggle('compact', s.compact); app.classList.toggle('focus', state.focus);
+    app.classList.toggle('sorting',state.sortMode);
     if (s.wallpaper === 'custom' && s.customWallpaper) app.style.setProperty('--custom-wallpaper', 'url("' + s.customWallpaper + '")');
     else app.style.removeProperty('--custom-wallpaper');
     $('widgets').hidden = !s.showWidgets;
@@ -226,6 +227,21 @@
   function contextItem() {
     return state.data.links.find(function (item) { return item.id === state.contextItemId; });
   }
+  function reorderLink(sourceId,targetId) {
+    var from = state.data.links.findIndex(function(l){return l.id===sourceId;});
+    var to = state.data.links.findIndex(function(l){return l.id===targetId;});
+    if(from<0 || to<0 || from===to)return false;
+    var moved=state.data.links.splice(from,1)[0];
+    state.data.links.splice(to,0,moved);
+    if(!save())return false;
+    renderTiles();
+    return true;
+  }
+  function linkAtPoint(x,y) {
+    var el=document.elementFromPoint(x,y);
+    var tile=el && el.closest ? el.closest('.tile[data-link-id]') : null;
+    return tile ? tile.dataset.linkId : null;
+  }
   function tile(item) {
     var wrap = node('div','tile'), logo = node('span','tile-icon'), title = node('span','tile-name',item.name);
     // 默认尝试获取真实站点图标，失败则使用用户设置的字符图标。
@@ -241,19 +257,54 @@
       favicon.src = 'https://www.google.com/s2/favicons?domain=' + encodeURIComponent(hostname) + '&sz=128';
     } catch (_) { /* 保留字符图标 */ }
     logo.style.background = item.color;
+    wrap.dataset.linkId=item.id;
     wrap.draggable = state.sortMode;
     if (state.sortMode) {
-      wrap.addEventListener('dragstart', function (e) { wrap.classList.add('dragging'); e.dataTransfer.setData('text/plain',item.id); });
-      wrap.addEventListener('dragend', function () { wrap.classList.remove('dragging'); });
-      wrap.addEventListener('dragover', function (e) { e.preventDefault(); });
-      wrap.addEventListener('drop', function (e) {
-        e.preventDefault(); var source = e.dataTransfer.getData('text/plain'), a = state.data.links.findIndex(function (l) { return l.id === source; }), b = state.data.links.findIndex(function (l) { return l.id === item.id; });
-        if (a < 0 || b < 0 || a === b) return;
-        var moved = state.data.links.splice(a,1)[0]; state.data.links.splice(b,0,moved); if (save()) renderTiles();
+      wrap.addEventListener('dragstart', function (e) {
+        if (!e.dataTransfer) return;
+        wrap.classList.add('dragging');
+        e.dataTransfer.effectAllowed='move';
+        e.dataTransfer.setData('text/plain',item.id);
       });
+      wrap.addEventListener('dragend',function(){wrap.classList.remove('dragging');});
+      wrap.addEventListener('dragover',function(e){e.preventDefault();if(e.dataTransfer)e.dataTransfer.dropEffect='move';});
+      wrap.addEventListener('drop',function(e){
+        e.preventDefault();if(!e.dataTransfer)return;
+        reorderLink(e.dataTransfer.getData('text/plain'),item.id);
+      });
+      var touchSorting=false,dropTarget=null;
+      wrap.addEventListener('pointerdown',function(e){
+        if(e.pointerType!=='touch'&&e.pointerType!=='pen')return;
+        e.preventDefault();touchSorting=true;dropTarget=null;
+        wrap.classList.add('touch-sorting');
+        try{wrap.setPointerCapture(e.pointerId);}catch(_){}
+      });
+      wrap.addEventListener('pointermove',function(e){
+        if(!touchSorting)return;
+        e.preventDefault();
+        dropTarget=linkAtPoint(e.clientX,e.clientY);
+        document.querySelectorAll('.tile.drop-target').forEach(function(t){t.classList.remove('drop-target');});
+        if(dropTarget && dropTarget!==item.id){
+          var target=document.querySelector('.tile[data-link-id="'+dropTarget+'"]');
+          if(target)target.classList.add('drop-target');
+        }
+      });
+      function finishTouch(e,cancelled){
+        if(!touchSorting)return;
+        touchSorting=false;wrap.classList.remove('touch-sorting');
+        document.querySelectorAll('.tile.drop-target').forEach(function(t){t.classList.remove('drop-target');});
+        try{if(wrap.hasPointerCapture(e.pointerId))wrap.releasePointerCapture(e.pointerId);}catch(_){}
+        if(!cancelled){
+          var dest=linkAtPoint(e.clientX,e.clientY)||dropTarget;
+          if(dest && dest!==item.id)reorderLink(item.id,dest);
+        }
+        dropTarget=null;
+      }
+      wrap.addEventListener('pointerup',function(e){finishTouch(e,false);});
+      wrap.addEventListener('pointercancel',function(e){finishTouch(e,true);});
     }
     var link = node('a','tile-link'); link.href = item.url; link.target = '_blank'; link.rel = 'noopener noreferrer';
-    link.setAttribute('aria-label','打开 ' + item.name); link.append(logo,title);
+    link.setAttribute('aria-label',state.sortMode ? '排序 ' + item.name + '，可使用 Alt 加方向键' : '打开 ' + item.name); link.append(logo,title);
     link.style.cssText = 'display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;text-decoration:none;color:inherit;width:100%;height:100%';
     wrap.append(link);
     // 桌面右键、键盘 Shift+F10、触屏长按共用同一菜单。
@@ -262,6 +313,16 @@
       openContext(item,e.clientX,e.clientY,link);
     });
     link.addEventListener('keydown',function(e){
+      if(state.sortMode && e.altKey && ['ArrowLeft','ArrowUp','ArrowRight','ArrowDown'].includes(e.key)){
+        e.preventDefault();
+        var ids=Array.from(document.querySelectorAll('.tile[data-link-id]')).map(function(n){return n.dataset.linkId;});
+        var pos=ids.indexOf(item.id),next=pos + (e.key==='ArrowLeft'||e.key==='ArrowUp'?-1:1);
+        if(pos>=0 && next>=0 && next<ids.length && reorderLink(item.id,ids[next])){
+          var nextLink=document.querySelector('.tile[data-link-id="'+item.id+'"] .tile-link');
+          if(nextLink)nextLink.focus();
+        }
+        return;
+      }
       if ((e.shiftKey && e.key === 'F10') || e.key === 'ContextMenu') {
         e.preventDefault();
         var b = link.getBoundingClientRect();
@@ -287,7 +348,7 @@
     link.addEventListener('pointercancel',cancelPress);
     link.addEventListener('pointerleave',cancelPress);
     link.addEventListener('click',function(e){
-      if (longPressed) { e.preventDefault(); e.stopPropagation(); longPressed=false; }
+      if (state.sortMode || longPressed) { e.preventDefault(); e.stopPropagation(); longPressed=false; }
     });
     return wrap;
   }
@@ -305,6 +366,8 @@
       var add = node('button','tile tile-add'), ico = node('span','tile-icon','＋'), name = node('span','tile-name','添加网站');
       add.append(ico,name); add.addEventListener('click',function () { openEdit(); }); tiles.append(add);
     }
+    var hint=document.querySelector('.manage-hint');
+    if(hint)hint.textContent=state.sortMode?'排序模式：拖动图标或按 Alt + 方向键':'右键或长按图标进行管理';
     $('empty').hidden = visible.length > 0 || !term;
   }
   function renderManager() {
@@ -453,9 +516,9 @@
       this.classList.toggle('active',state.sortMode);
       this.textContent=state.sortMode?'✓ 完成排序':'⇅ 图标排序';
       if(state.focus){state.focus=false;applySettings();}
-      hideContext(false);renderTiles();
+      hideContext(false);applySettings();renderTiles();
       $('settingsDialog').close();
-      if(state.sortMode)toast('已开启排序：使用鼠标拖动图标，完成后在设置中关闭');
+      if(state.sortMode)toast('排序已开启：可用鼠标或触屏拖动，键盘使用 Alt + 方向键');
       $('linksSection').scrollIntoView({behavior:'smooth',block:'start'});
     });
     $('searchForm').addEventListener('submit',function(e){ e.preventDefault();var q=$('searchInput').value.trim();if(!q){$('searchInput').focus();return;} window.open(searchEngines[state.data.settings.engine]+encodeURIComponent(q),'_blank','noopener,noreferrer'); });
