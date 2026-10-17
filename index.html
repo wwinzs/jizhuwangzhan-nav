@@ -64,6 +64,19 @@
     <button id="contextEdit" type="button" role="menuitem">✎ 编辑网站</button>
     <button id="contextDelete" type="button" role="menuitem" class="context-danger">删除网站</button>
   </div>
+  <div id="storageRecovery" class="storage-recovery" role="alert" hidden>
+    <div><strong>本地导航数据需要恢复</strong><p>检测到当前浏览器的导航数据无法读取。为避免覆盖原始内容，已暂停保存。请先下载原始数据，再选择重置。</p></div>
+    <div class="recovery-actions"><button id="downloadBrokenData" type="button">下载原始数据</button><button id="resetBrokenData" type="button">重置并重新启用</button></div>
+  </div>
+  <dialog id="groupDialog" class="dialog group-dialog">
+    <form id="groupForm" class="dialog-inner" method="dialog">
+      <div class="dialog-head"><div><small>CATEGORIES</small><h2 id="groupDialogTitle">新增分类</h2></div><button id="groupClose" type="button" class="close" aria-label="关闭">×</button></div>
+      <label>分类名称<input id="groupName" maxlength="32" required placeholder="例如：学习工具"></label>
+      <label>分类图标<input id="groupIcon" maxlength="4" placeholder="✦"></label>
+      <div id="groupError" class="form-error" role="alert"></div>
+      <div class="dialog-actions"><button id="groupCancel" type="button" class="ghost">取消</button><button type="submit" class="primary-btn">保存分类</button></div>
+    </form>
+  </dialog>
   <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
   <dialog id="editDialog" class="dialog"><form id="editForm" class="dialog-inner" method="dialog"><div class="dialog-head"><div><small>QUICK ACCESS</small><h2 id="dialogTitle">添加网站</h2></div><button id="editClose" type="button" class="close">×</button></div><label>网站名称<input id="linkName" required maxlength="40" placeholder="例如：我的博客"></label><label>网站地址<input id="linkUrl" required maxlength="2048" placeholder="https://example.com"></label><div class="two-cols"><label>所属分类<select id="linkGroup"></select></label><label>图标字符<input id="linkIcon" maxlength="4" placeholder="✦"></label></div><label>图标颜色<input id="linkColor" type="color" value="#708cfc"></label><label class="checkbox-line"><input id="linkFav" type="checkbox"> 加入我的常用</label><div id="editError" class="form-error" role="alert"></div><div class="dialog-actions"><button id="deleteLink" type="button" class="danger" hidden>删除</button><button id="cancelEdit" type="button" class="ghost">取消</button><button type="submit" class="primary-btn">保存网站</button></div></form></dialog>
   <dialog id="settingsDialog" class="dialog settings-dialog"><div class="settings-inner"><div class="dialog-head"><div><small>PERSONALIZE YOUR SPACE</small><h2>个性化设置</h2></div><button id="settingsClose" class="close" aria-label="关闭设置">×</button></div><div class="settings-scroll"><section class="setting-section"><h3>☼ 主题外观</h3><p>切换喜欢的桌面主题</p><div id="themeButtons" class="choice-row"><button data-theme="dark">深色</button><button data-theme="light">浅色</button></div></section><section class="setting-section"><h3>✧ 桌面壁纸</h3><p>选择一套内置壁纸，或上传自己的图片</p><div id="wallpaperButtons" class="wallpaper-options"><button data-wallpaper="aurora">极光蓝</button><button data-wallpaper="dusk">落日橙</button><button data-wallpaper="ocean">海洋蓝</button><button data-wallpaper="forest">森系绿</button><button data-wallpaper="night">午夜紫</button></div><label class="upload-btn">↑ 上传壁纸（≤2 MB）<input id="wallpaperUpload" type="file" accept="image/png,image/jpeg,image/webp" hidden></label></section><section class="setting-section"><h3>▦ 桌面显示</h3>

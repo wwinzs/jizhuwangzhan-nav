@@ -35,6 +35,9 @@
   };
   var state = { data: null, activeGroup: 'all', editingId: null, sortMode: false, focus: false, monthOffset: 0, contextItemId: null, contextTrigger: null };
   var toastTimer;
+  var brokenRaw = null;
+  var lastSavedData = null;
+  var editingGroupId = null;
   function clone(x) { return JSON.parse(JSON.stringify(x)); }
   function str(v, max) { return typeof v === 'string' ? v.trim().slice(0, max) : ''; }
   function id() { return window.crypto && crypto.randomUUID ? crypto.randomUUID() : 'id-' + Date.now() + '-' + Math.random().toString(36).slice(2); }
@@ -89,10 +92,63 @@
     };
   }
   function load() {
-    try { var raw = localStorage.getItem(STORAGE_KEY); return raw ? validate(JSON.parse(raw)) : clone(defaults); }
-    catch (_) { return clone(defaults); }
+    var raw = null;
+    try { raw = localStorage.getItem(STORAGE_KEY); }
+    catch (_) { toast('浏览器禁止读取本地存储，本次修改无法持久保存'); return clone(defaults); }
+    if (raw !== null) {
+      try { return validate(JSON.parse(raw)); }
+      catch (_) {
+        // 不删除、不覆盖损坏的存储；用户可以导出原始数据自行检查。
+        brokenRaw = raw;
+      }
+    }
+    return clone(defaults);
   }
-  function save() { try { localStorage.setItem(STORAGE_KEY, JSON.stringify(state.data)); } catch (_) { toast('本地存储空间不足，请导出数据并减小壁纸'); } }
+  function restoreSnapshot() {
+    if (!lastSavedData) return;
+    state.data = clone(lastSavedData);
+    if (state.activeGroup !== 'all' && state.activeGroup !== 'favorites' && !state.data.groups.some(function(g){return g.id === state.activeGroup;})) state.activeGroup = 'all';
+    render();
+    $('notes').value = state.data.notes;
+    $('noteCount').textContent = state.data.notes.length + ' / 10000';
+  }
+  function save() {
+    if (brokenRaw !== null) {
+      restoreSnapshot();
+      toast('原始数据尚未恢复，保存已暂停；请先下载原始数据');
+      return false;
+    }
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(state.data));
+      lastSavedData = clone(state.data);
+      return true;
+    } catch (_) {
+      restoreSnapshot();
+      toast('保存失败：本地存储不可用或空间不足，请导出备份');
+      return false;
+    }
+  }
+  function exportOriginal() {
+    if (brokenRaw === null) return;
+    var blob = new Blob([brokenRaw], {type:'application/json'});
+    var url = URL.createObjectURL(blob), link = document.createElement('a');
+    link.href = url; link.download = '记住网站-待恢复的原始数据.json'; link.click();
+    setTimeout(function(){URL.revokeObjectURL(url);},1500);
+  }
+  function resetOriginal() {
+    if (brokenRaw === null) return;
+    if (!confirm('确定重置无法读取的导航数据吗？请先下载原始文件保存。')) return;
+    try {
+      var fresh = clone(defaults);
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(fresh));
+      brokenRaw = null; state.data = fresh; lastSavedData = clone(fresh);
+      state.activeGroup = 'all';
+      $('storageRecovery').hidden = true;
+      $('notes').value = fresh.notes;
+      $('noteCount').textContent = fresh.notes.length + ' / 10000';
+      render(); toast('本地数据已重置，保存功能恢复');
+    } catch (_) { toast('重置失败：浏览器拒绝写入本地存储'); }
+  }
   function toast(message) {
     var el = $('toast'); el.textContent = message; el.hidden = false; clearTimeout(toastTimer);
     toastTimer = setTimeout(function () { el.hidden = true; }, 3000);
@@ -193,7 +249,7 @@
       wrap.addEventListener('drop', function (e) {
         e.preventDefault(); var source = e.dataTransfer.getData('text/plain'), a = state.data.links.findIndex(function (l) { return l.id === source; }), b = state.data.links.findIndex(function (l) { return l.id === item.id; });
         if (a < 0 || b < 0 || a === b) return;
-        var moved = state.data.links.splice(a,1)[0]; state.data.links.splice(b,0,moved); save(); renderTiles();
+        var moved = state.data.links.splice(a,1)[0]; state.data.links.splice(b,0,moved); if (save()) renderTiles();
       });
     }
     var link = node('a','tile-link'); link.href = item.url; link.target = '_blank'; link.rel = 'noopener noreferrer';
@@ -271,7 +327,7 @@
     $('dialogTitle').textContent = item ? '编辑网站' : '添加网站';
     $('linkName').value = item ? item.name : ''; $('linkUrl').value = item ? item.url : '';
     $('linkIcon').value = item ? item.icon : '✦'; $('linkColor').value = item ? item.color : '#708cfc';
-    $('linkFav').checked = item ? item.favorite : false;
+    $('linkFav').checked = item ? item.favorite : state.activeGroup === 'favorites';
     $('linkGroup').value = item ? item.groupId : state.data.groups.some(function (g) { return g.id === state.activeGroup; }) ? state.activeGroup : state.data.groups[0].id;
     $('editError').textContent = ''; $('deleteLink').hidden = !item;
     $('editDialog').showModal(); $('linkName').focus();
@@ -284,19 +340,34 @@
     var data = { id: state.editingId || id(), name: name, url: url, icon: $('linkIcon').value.trim().slice(0,4) || '✦', color: $('linkColor').value, groupId: $('linkGroup').value, favorite: $('linkFav').checked };
     if (state.editingId) { var index = state.data.links.findIndex(function (l) { return l.id === state.editingId; }); if (index >= 0) state.data.links[index] = data; }
     else { if (state.data.links.length >= 500) { $('editError').textContent = '最多只能保存 500 个网站'; return; } state.data.links.push(data); }
-    $('editDialog').close(); save(); render(); toast(state.editingId ? '已更新网站' : '已添加网站');
+    if (!save()) return;
+    $('editDialog').close(); render(); toast(state.editingId ? '已更新网站' : '已添加网站');
   }
   function changeGroup(group) {
-    var title = window.prompt(group ? '修改分类名称' : '输入新分类名称', group ? group.name : '');
-    if (title === null) return;
-    var name = title.trim().slice(0,32);
-    if (!name) { toast('分类名称不能为空'); return; }
-    if (group) group.name = name;
+    editingGroupId = group ? group.id : null;
+    $('groupDialogTitle').textContent = group ? '编辑分类' : '新增分类';
+    $('groupName').value = group ? group.name : '';
+    $('groupIcon').value = group ? group.icon : '✦';
+    $('groupError').textContent = '';
+    $('groupDialog').showModal();
+    $('groupName').focus();
+  }
+  function saveGroup(e) {
+    e.preventDefault();
+    var name = $('groupName').value.trim();
+    var icon = $('groupIcon').value.trim().slice(0,4) || '✦';
+    if (!name || name.length > 32) { $('groupError').textContent = '分类名称应为 1 至 32 个字符'; return; }
+    var group = state.data.groups.find(function(g){ return g.id === editingGroupId; });
+    if (editingGroupId && !group) { $('groupError').textContent = '分类已不存在，请重新打开'; return; }
+    if (group) { group.name = name; group.icon = icon; }
     else {
-      if (state.data.groups.length >= 50) { toast('最多支持 50 个分类'); return; }
-      var fresh = { id: id(), icon: '✦', name: name }; state.data.groups.push(fresh); state.activeGroup = fresh.id;
+      if (state.data.groups.length >= 50) { $('groupError').textContent = '最多支持 50 个分类'; return; }
+      var fresh = {id:id(),name:name,icon:icon};
+      state.data.groups.push(fresh);
+      state.activeGroup = fresh.id;
     }
-    save(); render(); toast('分类已保存');
+    if (!save()) return;
+    $('groupDialog').close(); render(); toast('分类已保存');
   }
   function deleteGroup(group) {
     if (state.data.groups.length === 1) { toast('至少保留一个分类'); return; }
@@ -305,7 +376,8 @@
     state.data.links.forEach(function (l) { if (l.groupId === group.id) l.groupId = replacement; });
     state.data.groups = state.data.groups.filter(function (g) { return g.id !== group.id; });
     if (state.activeGroup === group.id) state.activeGroup = 'all';
-    save(); render(); toast('分类已删除，网站已保留');
+    if (!save()) return;
+    render(); toast('分类已删除，网站已保留');
   }
   function refreshClock() {
     var now = new Date(), h = now.getHours(), min = String(now.getMinutes()).padStart(2,'0');
@@ -339,14 +411,14 @@
     try {
       var incoming = validate(JSON.parse(await file.text()));
       if (!confirm('导入会覆盖当前导航内容。建议先导出备份，确定继续吗？')) return;
-      state.data = incoming; state.activeGroup='all'; save(); render(); $('notes').value=state.data.notes; $('noteCount').textContent=state.data.notes.length+' / 10000'; $('settingsDialog').close(); toast('导入成功');
+      state.data = incoming; state.activeGroup='all'; if (!save()) return; render(); $('notes').value=state.data.notes; $('noteCount').textContent=state.data.notes.length+' / 10000'; $('settingsDialog').close(); toast('导入成功');
     } catch (err) { toast(err && err.message ? err.message : '文件无法导入'); }
   }
   function setWallpaperFromFile(e) {
     var file=e.target.files && e.target.files[0]; e.target.value=''; if(!file) return;
     if(!['image/png','image/jpeg','image/webp'].includes(file.type)||file.size>2000000){ toast('请上传 2MB 内的 PNG/JPG/WebP 图片'); return; }
     var reader=new FileReader();
-    reader.onload=function(){ var result=String(reader.result||''); if(!/^data:image\/(?:png|jpeg|webp);base64,/.test(result)){ toast('壁纸格式无效'); return; } state.data.settings.customWallpaper=result; state.data.settings.wallpaper='custom'; save(); applySettings(); toast('壁纸已更换'); };
+    reader.onload=function(){ var result=String(reader.result||''); if(!/^data:image\/(?:png|jpeg|webp);base64,/.test(result)){ toast('壁纸格式无效'); return; } state.data.settings.customWallpaper=result; state.data.settings.wallpaper='custom'; if(save()){ applySettings(); toast('壁纸已更换'); } };
     reader.onerror=function(){ toast('壁纸读取失败'); };
     reader.readAsDataURL(file);
   }
@@ -367,9 +439,14 @@
     $('editForm').addEventListener('submit',saveEdit);
     $('deleteLink').addEventListener('click',function(){
       if (!state.editingId || !confirm('确定删除这个网站吗？')) return;
-      state.data.links=state.data.links.filter(function(l){return l.id!==state.editingId;}); save(); $('editDialog').close(); render(); toast('网站已删除');
+      state.data.links=state.data.links.filter(function(l){return l.id!==state.editingId;}); if(!save())return; $('editDialog').close(); render(); toast('网站已删除');
     });
     $('manageAddGroup').addEventListener('click',function(){changeGroup();});
+    $('groupForm').addEventListener('submit',saveGroup);
+    $('groupClose').addEventListener('click',function(){ $('groupDialog').close(); });
+    $('groupCancel').addEventListener('click',function(){ $('groupDialog').close(); });
+    $('downloadBrokenData').addEventListener('click',exportOriginal);
+    $('resetBrokenData').addEventListener('click',resetOriginal);
     $('filter').addEventListener('input',renderTiles);
     $('sortMode').addEventListener('click',function(){
       state.sortMode=!state.sortMode;
@@ -382,7 +459,7 @@
       $('linksSection').scrollIntoView({behavior:'smooth',block:'start'});
     });
     $('searchForm').addEventListener('submit',function(e){ e.preventDefault();var q=$('searchInput').value.trim();if(!q){$('searchInput').focus();return;} window.open(searchEngines[state.data.settings.engine]+encodeURIComponent(q),'_blank','noopener,noreferrer'); });
-    $('engine').addEventListener('change',function(){ state.data.settings.engine=this.value; save();});
+    $('engine').addEventListener('change',function(){ state.data.settings.engine=this.value; if(!save())applySettings();});
     $('notes').addEventListener('input',function(){state.data.notes=this.value; $('noteCount').textContent=this.value.length+' / 10000'; save();});
     $('prevMonth').addEventListener('click',function(){ state.monthOffset--;drawCalendar(); });
     $('nextMonth').addEventListener('click',function(){ state.monthOffset++;drawCalendar(); });
@@ -391,15 +468,15 @@
       state.focus=!state.focus;applySettings();
       $('settingsDialog').close();
     });
-    document.querySelectorAll('#themeButtons button').forEach(function(b){ b.addEventListener('click',function(){state.data.settings.theme=b.dataset.theme;save();applySettings();}); });
-    document.querySelectorAll('#wallpaperButtons button').forEach(function(b){b.addEventListener('click',function(){state.data.settings.wallpaper=b.dataset.wallpaper;save();applySettings();});});
-    $('showWidgets').addEventListener('change',function(){state.data.settings.showWidgets=this.checked;save();applySettings();});
-    $('compact').addEventListener('change',function(){state.data.settings.compact=this.checked;save();applySettings();});
+    document.querySelectorAll('#themeButtons button').forEach(function(b){ b.addEventListener('click',function(){state.data.settings.theme=b.dataset.theme; if(save())applySettings();}); });
+    document.querySelectorAll('#wallpaperButtons button').forEach(function(b){b.addEventListener('click',function(){state.data.settings.wallpaper=b.dataset.wallpaper; if(save())applySettings();});});
+    $('showWidgets').addEventListener('change',function(){state.data.settings.showWidgets=this.checked; if(save())applySettings();});
+    $('compact').addEventListener('change',function(){state.data.settings.compact=this.checked; if(save())applySettings();});
     $('wallpaperUpload').addEventListener('change',setWallpaperFromFile);
     $('export').addEventListener('click',exportBackup); $('import').addEventListener('change',importBackup);
     $('reset').addEventListener('click',function(){
       if(!confirm('确定恢复默认吗？这将清除自定义分类、网址和笔记。建议先导出备份。')) return;
-      state.data=clone(defaults); state.activeGroup='all'; $('notes').value=state.data.notes;save();render();$('settingsDialog').close();toast('已恢复默认');
+      state.data=clone(defaults); state.activeGroup='all'; if(!save())return; $('notes').value=state.data.notes;render();$('settingsDialog').close();toast('已恢复默认');
     });
     $('contextOpen').addEventListener('click',function(){
       var item=contextItem(); if (!item)return;
@@ -408,8 +485,8 @@
     $('contextFav').addEventListener('click',function(){
       var item=contextItem(); if (!item)return;
       item.favorite=!item.favorite;
-      hideContext(false);save();render();
-      toast(item.favorite ? '已加入常用' : '已取消常用');
+      var message = item.favorite ? '已加入常用' : '已取消常用';
+      hideContext(false); if(save()){render();toast(message);}
     });
     $('contextEdit').addEventListener('click',function(){
       var item=contextItem(); if (!item)return;
@@ -420,7 +497,7 @@
       hideContext(false);
       if (!confirm('确定删除「'+item.name+'」吗？'))return;
       state.data.links=state.data.links.filter(function(l){return l.id!==item.id;});
-      save();render();toast('网站已删除');
+      if(save()){render();toast('网站已删除');}
     });
     document.addEventListener('pointerdown',function(e){
       if(!$('linkContextMenu').hidden && !$('linkContextMenu').contains(e.target)) hideContext(false);
@@ -436,6 +513,6 @@
       if(e.key==='/' && !e.ctrlKey && !e.altKey && !/^(INPUT|TEXTAREA|SELECT)$/.test(document.activeElement.tagName)){e.preventDefault();$('searchInput').focus();}
     });
   }
-  state.data=load(); bind(); $('notes').value=state.data.notes; $('noteCount').textContent=state.data.notes.length+' / 10000';
+  state.data=load(); lastSavedData=clone(state.data); bind(); $('storageRecovery').hidden = brokenRaw === null; $('notes').value=state.data.notes; $('noteCount').textContent=state.data.notes.length+' / 10000';
   refreshClock(); drawCalendar(); render(); setInterval(function(){refreshClock();if(new Date().getHours()===0 && new Date().getMinutes()===0)drawCalendar();},10000);
 })();
