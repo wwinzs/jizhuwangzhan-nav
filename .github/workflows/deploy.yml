@@ -26,7 +26,7 @@ jobs:
       - name: Prepare release
         run: |
           mkdir dist
-          cp index.html app.js style.css desktop.css favicon.svg dist/
+          cp index.html app.js style.css desktop.css minimal.css favicon.svg dist/
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with:

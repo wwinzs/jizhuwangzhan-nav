@@ -1,0 +1,83 @@
+<!doctype html>
+<html lang="zh-CN"><head><meta charset="UTF-8"><title>导航交互冒烟测试</title></head>
+<body data-test-status="pending"><pre id="result">测试启动中</pre>
+<iframe id="site" src="../index.html" style="width:1440px;height:900px"></iframe>
+<script>
+(function(){
+  var frame = document.getElementById('site');
+  var checks = 0;
+  function assert(ok, msg){ checks++; if(!ok)throw Error('断言失败：'+msg); }
+  function sleep(ms){ return new Promise(function(resolve){setTimeout(resolve,ms);}); }
+  frame.addEventListener('load',async function(){
+    try {
+      var d = frame.contentDocument, w = frame.contentWindow;
+      var el = function(id){ return d.getElementById(id); };
+      assert(!!el('menu') && !!el('settingsButton'), '必要按钮存在');
+      assert(!d.getElementById('newLinkTop') && !d.getElementById('openSettings'),'重复入口已移除');
+      assert(!d.getElementById('addLink'),'添加入口已整合');
+      assert(el('sidebar').inert,'侧栏默认不可被键盘误聚焦');
+      assert(w.getComputedStyle(el('sidebar')).position==='fixed','分类为抽屉而非固定占位栏');
+      assert(el('sidebar').getAttribute('aria-hidden')==='true','抽屉无障碍初始状态');
+      assert(!!d.querySelector('.tile-link'),'网站列表正常渲染');
+      assert(!d.querySelector('.tile-menu'),'不再有图标附属按钮');
+      el('menu').click();
+      assert(el('sidebar').classList.contains('mobile-open'),'抽屉展开');
+      assert(!el('sidebar').inert && el('menu').getAttribute('aria-expanded')==='true','展开状态可访问');
+      el('closeSidebar').click();
+      assert(!el('sidebar').classList.contains('mobile-open') && el('sidebar').inert,'抽屉可关闭');
+      el('menu').click();
+      el('mobileScrim').click();
+      assert(el('mobileScrim').hidden,'遮罩点击关闭抽屉');
+      el('settingsButton').click();
+      assert(el('settingsDialog').open,'设置入口可用');
+      assert(!!el('focusButton') && !!el('sortMode') && !!el('manageAddGroup'),'高级操作已移至设置');
+      el('settingsClose').click();
+      el('filterToggle').click();
+      assert(!el('filter').hidden && el('filterToggle').getAttribute('aria-expanded')==='true','搜索展开');
+      el('filter').value='github';
+      el('filter').dispatchEvent(new Event('input',{bubbles:true}));
+      assert(d.querySelectorAll('.tile:not(.tile-add)').length===1,'本地查找按网站名称筛选');
+      el('filterToggle').click();
+      assert(el('filter').hidden && el('filter').value==='','搜索可收起并清空');
+      var link=d.querySelector('.tile-link');
+      link.dispatchEvent(new MouseEvent('contextmenu',{bubbles:true,cancelable:true,clientX:100,clientY:100}));
+      assert(!el('linkContextMenu').hidden,'右键菜单可打开');
+      el('contextEdit').click();
+      assert(el('editDialog').open,'菜单编辑进入对话框');
+      el('editClose').click();
+      link=d.querySelector('.tile-link');
+      link.dispatchEvent(new KeyboardEvent('keydown',{key:'F10',shiftKey:true,bubbles:true,cancelable:true}));
+      assert(!el('linkContextMenu').hidden,'Shift+F10 可打开操作菜单');
+      w.dispatchEvent(new KeyboardEvent('keydown',{key:'Escape',bubbles:true,cancelable:true}));
+      assert(el('linkContextMenu').hidden,'Escape 关闭操作菜单');
+      link=d.querySelector('.tile-link');
+      link.dispatchEvent(new PointerEvent('pointerdown',{pointerType:'touch',clientX:30,clientY:30,bubbles:true}));
+      await sleep(650);
+      assert(!el('linkContextMenu').hidden,'手机长按打开操作菜单');
+      link.dispatchEvent(new PointerEvent('pointerup',{pointerType:'touch',bubbles:true}));
+      var ev=new MouseEvent('click',{bubbles:true,cancelable:true});
+      link.dispatchEvent(ev);
+      assert(ev.defaultPrevented,'长按后不会误打开网站');
+      el('contextFav').click();
+      assert(el('linkContextMenu').hidden,'收藏后菜单关闭');
+      el('settingsButton').click();
+      el('sortMode').click();
+      assert(d.querySelector('.tile').draggable,'排序模式可开启');
+      el('settingsButton').click();
+      el('sortMode').click();
+      assert(!d.querySelector('.tile').draggable,'排序模式可关闭');
+      el('settingsButton').click();
+      el('focusButton').click();
+      assert(el('app').classList.contains('focus'),'专注模式可开启');
+      el('settingsButton').click();
+      el('focusButton').click();
+      assert(!el('app').classList.contains('focus'),'专注模式可退出');
+      document.body.dataset.testStatus='PASS';
+      document.getElementById('result').textContent='PASS '+checks+' checks';
+    }catch(e){
+      document.body.dataset.testStatus='FAIL';
+      document.getElementById('result').textContent='FAIL '+checks+' checks: '+(e.stack || e);
+    }
+  });
+})();
+</script></body></html>

@@ -33,7 +33,7 @@
     ].map(function (l, i) { return { id: 'link-' + i, name: l[0], url: l[1], groupId: l[2], icon: l[3], color: l[4], favorite: l[5] }; }),
     settings: { theme: 'dark', wallpaper: 'aurora', customWallpaper: '', engine: 'baidu', showWidgets: true, compact: false }
   };
-  var state = { data: null, activeGroup: 'all', editingId: null, sortMode: false, focus: false, monthOffset: 0 };
+  var state = { data: null, activeGroup: 'all', editingId: null, sortMode: false, focus: false, monthOffset: 0, contextItemId: null, contextTrigger: null };
   var toastTimer;
   function clone(x) { return JSON.parse(JSON.stringify(x)); }
   function str(v, max) { return typeof v === 'string' ? v.trim().slice(0, max) : ''; }
@@ -112,7 +112,23 @@
     document.querySelectorAll('[data-wallpaper]').forEach(function (b) { if (b.tagName === 'BUTTON') b.classList.toggle('selected', b.dataset.wallpaper === s.wallpaper); });
     $('focusButton').lastElementChild.textContent = state.focus ? '退出专注' : '专注模式';
   }
-  function closeMobile() { $('sidebar').classList.remove('mobile-open'); $('mobileScrim').hidden = true; }
+  function closeMobile(restoreFocus) {
+    $('sidebar').classList.remove('mobile-open');
+    $('sidebar').inert = true;
+    $('sidebar').setAttribute('aria-hidden','true');
+    $('mobileScrim').hidden = true;
+    $('menu').setAttribute('aria-expanded','false');
+    if (restoreFocus) $('menu').focus();
+  }
+  function openSidebar() {
+    hideContext(false);
+    $('sidebar').inert = false;
+    $('sidebar').removeAttribute('aria-hidden');
+    $('sidebar').classList.add('mobile-open');
+    $('mobileScrim').hidden = false;
+    $('menu').setAttribute('aria-expanded','true');
+    $('closeSidebar').focus();
+  }
   function selectGroup(key) { state.activeGroup = key; $('filter').value = ''; render(); closeMobile(); }
   function renderGroups() {
     var nav = $('groupNav'); nav.replaceChildren();
@@ -125,6 +141,34 @@
       btn.type = 'button'; btn.title = g.name; btn.setAttribute('aria-label',g.name + '，' + g.count + ' 个网站'); btn.append(node('span','group-icon',g.icon), node('span','group-name',g.name), node('span','count',String(g.count)));
       btn.addEventListener('click', function () { selectGroup(g.id); }); nav.append(btn);
     });
+  }
+  function hideContext(restoreFocus) {
+    var menu = $('linkContextMenu');
+    if (!menu.hidden) {
+      var trigger = state.contextTrigger;
+      menu.hidden = true;
+      state.contextItemId = null;
+      state.contextTrigger = null;
+      if (restoreFocus && trigger && trigger.isConnected) trigger.focus();
+    }
+  }
+  function openContext(item, x, y, trigger) {
+    if (state.sortMode) return;
+    hideContext(false);
+    state.contextItemId = item.id;
+    state.contextTrigger = trigger;
+    var menu = $('linkContextMenu');
+    $('contextFav').textContent = item.favorite ? '♥ 取消常用' : '♡ 加入常用';
+    menu.hidden = false;
+    var bounds = menu.getBoundingClientRect();
+    var left = Math.max(8, Math.min(x, window.innerWidth - bounds.width - 8));
+    var top = Math.max(8, Math.min(y, window.innerHeight - bounds.height - 8));
+    menu.style.left = left + 'px';
+    menu.style.top = top + 'px';
+    $('contextOpen').focus();
+  }
+  function contextItem() {
+    return state.data.links.find(function (item) { return item.id === state.contextItemId; });
   }
   function tile(item) {
     var wrap = node('div','tile'), logo = node('span','tile-icon'), title = node('span','tile-name',item.name);
@@ -156,13 +200,43 @@
     link.setAttribute('aria-label','打开 ' + item.name); link.append(logo,title);
     link.style.cssText = 'display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;text-decoration:none;color:inherit;width:100%;height:100%';
     wrap.append(link);
-    var menu = node('div','tile-menu'), fav = node('button','','♡'), edit = node('button','','⋯');
-    fav.textContent = item.favorite ? '♥' : '♡'; fav.title = item.favorite ? '取消常用' : '设为常用'; edit.title = '编辑网站';
-    fav.addEventListener('click',function () { item.favorite = !item.favorite; save(); render(); });
-    edit.addEventListener('click',function () { openEdit(item); });
-    menu.append(fav,edit); wrap.append(menu); return wrap;
+    // 桌面右键、键盘 Shift+F10、触屏长按共用同一菜单。
+    link.addEventListener('contextmenu',function(e){
+      e.preventDefault();
+      openContext(item,e.clientX,e.clientY,link);
+    });
+    link.addEventListener('keydown',function(e){
+      if ((e.shiftKey && e.key === 'F10') || e.key === 'ContextMenu') {
+        e.preventDefault();
+        var b = link.getBoundingClientRect();
+        openContext(item,b.left + b.width/2,b.top + b.height/2,link);
+      }
+    });
+    var pressTimer = null, originX = 0, originY = 0, longPressed = false;
+    function cancelPress(){ if (pressTimer !== null) clearTimeout(pressTimer); pressTimer = null; }
+    link.addEventListener('pointerdown',function(e){
+      cancelPress(); longPressed = false;
+      if (state.sortMode || (e.pointerType !== 'touch' && e.pointerType !== 'pen')) return;
+      originX = e.clientX; originY = e.clientY;
+      var x = e.clientX, y = e.clientY;
+      pressTimer = setTimeout(function(){
+        pressTimer = null; longPressed = true;
+        openContext(item,x,y,link);
+      },560);
+    });
+    link.addEventListener('pointermove',function(e){
+      if (Math.abs(e.clientX-originX)>12 || Math.abs(e.clientY-originY)>12) cancelPress();
+    });
+    link.addEventListener('pointerup',cancelPress);
+    link.addEventListener('pointercancel',cancelPress);
+    link.addEventListener('pointerleave',cancelPress);
+    link.addEventListener('click',function(e){
+      if (longPressed) { e.preventDefault(); e.stopPropagation(); longPressed=false; }
+    });
+    return wrap;
   }
   function renderTiles() {
+    hideContext(false);
     var tiles = $('tiles'); tiles.replaceChildren();
     var term = $('filter').value.trim().toLocaleLowerCase();
     var visible = state.data.links.filter(function (l) {
@@ -277,28 +351,46 @@
     reader.readAsDataURL(file);
   }
   function bind() {
-    $('menu').addEventListener('click',function(){ $('sidebar').classList.add('mobile-open'); $('mobileScrim').hidden=false; });
-    $('closeSidebar').addEventListener('click',closeMobile); $('mobileScrim').addEventListener('click',closeMobile);
-    $('openSettings').addEventListener('click',function(){ closeMobile(); $('settingsDialog').showModal(); });
-    $('settingsButton').addEventListener('click',function(){ $('settingsDialog').showModal(); });
+    $('menu').addEventListener('click',openSidebar);
+    $('closeSidebar').addEventListener('click',function(){closeMobile(true);});
+    $('mobileScrim').addEventListener('click',function(){closeMobile(true);});
+    $('settingsButton').addEventListener('click',function(){hideContext(false);closeMobile(false);$('settingsDialog').showModal();});
     $('settingsClose').addEventListener('click',function(){ $('settingsDialog').close(); });
-    $('newLinkTop').addEventListener('click',function(){ openEdit(); }); $('addLink').addEventListener('click',function(){ openEdit(); });
+    $('filterToggle').addEventListener('click',function(){
+      var filter = $('filter'), opening = filter.hidden;
+      filter.hidden = !opening;
+      $('filterToggle').setAttribute('aria-expanded',String(opening));
+      if(opening)filter.focus();
+      else {filter.value=''; renderTiles();}
+    });
     $('editClose').addEventListener('click',function(){ $('editDialog').close(); }); $('cancelEdit').addEventListener('click',function(){ $('editDialog').close(); });
     $('editForm').addEventListener('submit',saveEdit);
     $('deleteLink').addEventListener('click',function(){
       if (!state.editingId || !confirm('确定删除这个网站吗？')) return;
       state.data.links=state.data.links.filter(function(l){return l.id!==state.editingId;}); save(); $('editDialog').close(); render(); toast('网站已删除');
     });
-    $('addGroup').addEventListener('click',function(){changeGroup();}); $('manageAddGroup').addEventListener('click',function(){changeGroup();});
+    $('manageAddGroup').addEventListener('click',function(){changeGroup();});
     $('filter').addEventListener('input',renderTiles);
-    $('sortMode').addEventListener('click',function(){state.sortMode=!state.sortMode; this.classList.toggle('active',state.sortMode); this.textContent=state.sortMode?'✓ 完成排序':'⇅ 排序'; renderTiles();});
+    $('sortMode').addEventListener('click',function(){
+      state.sortMode=!state.sortMode;
+      this.classList.toggle('active',state.sortMode);
+      this.textContent=state.sortMode?'✓ 完成排序':'⇅ 图标排序';
+      if(state.focus){state.focus=false;applySettings();}
+      hideContext(false);renderTiles();
+      $('settingsDialog').close();
+      if(state.sortMode)toast('已开启排序：使用鼠标拖动图标，完成后在设置中关闭');
+      $('linksSection').scrollIntoView({behavior:'smooth',block:'start'});
+    });
     $('searchForm').addEventListener('submit',function(e){ e.preventDefault();var q=$('searchInput').value.trim();if(!q){$('searchInput').focus();return;} window.open(searchEngines[state.data.settings.engine]+encodeURIComponent(q),'_blank','noopener,noreferrer'); });
     $('engine').addEventListener('change',function(){ state.data.settings.engine=this.value; save();});
     $('notes').addEventListener('input',function(){state.data.notes=this.value; $('noteCount').textContent=this.value.length+' / 10000'; save();});
     $('prevMonth').addEventListener('click',function(){ state.monthOffset--;drawCalendar(); });
     $('nextMonth').addEventListener('click',function(){ state.monthOffset++;drawCalendar(); });
     $('today').addEventListener('click',function(){state.monthOffset=0;drawCalendar();});
-    $('focusButton').addEventListener('click',function(){state.focus=!state.focus;applySettings();});
+    $('focusButton').addEventListener('click',function(){
+      state.focus=!state.focus;applySettings();
+      $('settingsDialog').close();
+    });
     document.querySelectorAll('#themeButtons button').forEach(function(b){ b.addEventListener('click',function(){state.data.settings.theme=b.dataset.theme;save();applySettings();}); });
     document.querySelectorAll('#wallpaperButtons button').forEach(function(b){b.addEventListener('click',function(){state.data.settings.wallpaper=b.dataset.wallpaper;save();applySettings();});});
     $('showWidgets').addEventListener('change',function(){state.data.settings.showWidgets=this.checked;save();applySettings();});
@@ -309,7 +401,37 @@
       if(!confirm('确定恢复默认吗？这将清除自定义分类、网址和笔记。建议先导出备份。')) return;
       state.data=clone(defaults); state.activeGroup='all'; $('notes').value=state.data.notes;save();render();$('settingsDialog').close();toast('已恢复默认');
     });
+    $('contextOpen').addEventListener('click',function(){
+      var item=contextItem(); if (!item)return;
+      hideContext(false); window.open(item.url,'_blank','noopener,noreferrer');
+    });
+    $('contextFav').addEventListener('click',function(){
+      var item=contextItem(); if (!item)return;
+      item.favorite=!item.favorite;
+      hideContext(false);save();render();
+      toast(item.favorite ? '已加入常用' : '已取消常用');
+    });
+    $('contextEdit').addEventListener('click',function(){
+      var item=contextItem(); if (!item)return;
+      hideContext(false);openEdit(item);
+    });
+    $('contextDelete').addEventListener('click',function(){
+      var item=contextItem(); if (!item)return;
+      hideContext(false);
+      if (!confirm('确定删除「'+item.name+'」吗？'))return;
+      state.data.links=state.data.links.filter(function(l){return l.id!==item.id;});
+      save();render();toast('网站已删除');
+    });
+    document.addEventListener('pointerdown',function(e){
+      if(!$('linkContextMenu').hidden && !$('linkContextMenu').contains(e.target)) hideContext(false);
+    });
+    window.addEventListener('scroll',function(){hideContext(false);},true);
+    window.addEventListener('resize',function(){hideContext(false);});
     window.addEventListener('keydown',function(e){
+      if(e.key==='Escape'){
+        if(!$('linkContextMenu').hidden){e.preventDefault();hideContext(true);return;}
+        if($('sidebar').classList.contains('mobile-open')){e.preventDefault();closeMobile(true);return;}
+      }
       if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='k'){e.preventDefault();$('searchInput').focus();$('searchInput').select();}
       if(e.key==='/' && !e.ctrlKey && !e.altKey && !/^(INPUT|TEXTAREA|SELECT)$/.test(document.activeElement.tagName)){e.preventDefault();$('searchInput').focus();}
     });
