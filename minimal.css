@@ -122,3 +122,18 @@
   .recovery-actions{justify-content:stretch}
   .recovery-actions button{flex:1;min-width:0;white-space:normal}
 }
+
+/* v1.4 排序模式：显式区分普通访问与编辑交互 */
+.app.sorting .tile {cursor:grab;touch-action:none;user-select:none;-webkit-user-select:none}
+.app.sorting .tile-link {cursor:grab;touch-action:none;user-select:none;-webkit-user-select:none}
+.app.sorting .tile:active {cursor:grabbing}
+.app.sorting .tile.touch-sorting{opacity:.58;transform:scale(.97)}
+.app.sorting .tile.drop-target{
+  background:rgba(160,191,255,.23);
+  border:1px dashed rgba(230,240,255,.89);
+  transform:scale(1.035);
+}
+.app.sorting .tile-add{opacity:.65;cursor:pointer}
+@media(hover:none){
+  .app.sorting .tile{min-height:100px}
+}
