@@ -1,8 +1,9 @@
 name: Validate navigation
 on:
   push:
-    branches: [main, feat/itab-navigation-v1]
+    branches: [main]
   pull_request:
+  workflow_dispatch:
 jobs:
   check:
     runs-on: ubuntu-latest
@@ -17,10 +18,51 @@ jobs:
         run: |
           test -s index.html
           test -s style.css
+          test -s desktop.css
           test -s app.js
           test -s favicon.svg
       - name: Document references
         run: |
           grep -q 'app.js' index.html
           grep -q 'style.css' index.html
+          grep -q 'desktop.css' index.html
           grep -q 'favicon.svg' index.html
+      - name: Desktop stylesheet guard
+        run: |
+          node - <<'NODE'
+          const fs = require('node:fs');
+          const css = fs.readFileSync('desktop.css', 'utf8');
+          const expected = ['.sidebar', '.tiles', '.tile-icon', '.search-form', '.widgets', '@media(max-width:620px)'];
+          for (const selector of expected) {
+            if (!css.includes(selector)) throw new Error('Missing visual selector: ' + selector);
+          }
+          const left = (css.match(/\{/g) || []).length;
+          const right = (css.match(/\}/g) || []).length;
+          if (left !== right || !left) throw new Error('Unbalanced CSS braces');
+          console.log('Desktop layout stylesheet contract OK');
+          NODE
+      - name: Install CJK font for screenshot rendering
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq fonts-wqy-microhei > /dev/null
+      - name: Capture desktop and mobile layouts
+        run: |
+          set -eu
+          BROWSER="$(command -v google-chrome || command -v chromium || true)"
+          if [ -z "$BROWSER" ]; then
+            echo "::warning::No Chrome executable; screenshot smoke test skipped"
+            exit 0
+          fi
+          mkdir -p screenshots
+          python3 -m http.server 8765 --bind 127.0.0.1 >/tmp/nav-http.log 2>&1 &
+          sleep 2
+          curl -fsS http://127.0.0.1:8765/ >/dev/null
+          "$BROWSER" --headless --no-sandbox --disable-gpu --disable-dev-shm-usage --hide-scrollbars --virtual-time-budget=4500 --window-size=1440,900 --screenshot=screenshots/desktop.png http://127.0.0.1:8765/ || echo "::warning::Desktop screenshot failed"
+          "$BROWSER" --headless --no-sandbox --disable-gpu --disable-dev-shm-usage --hide-scrollbars --virtual-time-budget=4500 --window-size=390,844 --screenshot=screenshots/mobile.png http://127.0.0.1:8765/ || echo "::warning::Mobile screenshot failed"
+      - name: Upload visual screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: nav-visual-preview
+          path: screenshots/
+          if-no-files-found: ignore

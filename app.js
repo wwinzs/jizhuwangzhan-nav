@@ -122,12 +122,24 @@
     });
     choices.forEach(function (g) {
       var btn = node('button', 'group-row' + (state.activeGroup === g.id ? ' active' : ''));
-      btn.type = 'button'; btn.append(node('span','group-icon',g.icon), node('span','group-name',g.name), node('span','count',String(g.count)));
+      btn.type = 'button'; btn.title = g.name; btn.setAttribute('aria-label',g.name + '，' + g.count + ' 个网站'); btn.append(node('span','group-icon',g.icon), node('span','group-name',g.name), node('span','count',String(g.count)));
       btn.addEventListener('click', function () { selectGroup(g.id); }); nav.append(btn);
     });
   }
   function tile(item) {
-    var wrap = node('div','tile'), logo = node('span','tile-icon',item.icon), title = node('span','tile-name',item.name);
+    var wrap = node('div','tile'), logo = node('span','tile-icon'), title = node('span','tile-name',item.name);
+    // 默认尝试获取真实站点图标，失败则使用用户设置的字符图标。
+    var fallback = node('span','favicon-letter',item.icon);
+    logo.append(fallback);
+    try {
+      var hostname = new URL(item.url).hostname;
+      var favicon = node('img','favicon-img');
+      favicon.alt = ''; favicon.decoding = 'async'; favicon.referrerPolicy = 'no-referrer';
+      favicon.addEventListener('load',function() {
+        if (favicon.naturalWidth >= 16) { logo.append(favicon); logo.classList.add('has-favicon'); }
+      });
+      favicon.src = 'https://www.google.com/s2/favicons?domain=' + encodeURIComponent(hostname) + '&sz=128';
+    } catch (_) { /* 保留字符图标 */ }
     logo.style.background = item.color;
     wrap.draggable = state.sortMode;
     if (state.sortMode) {
