@@ -107,6 +107,7 @@
   function restoreSnapshot() {
     if (!lastSavedData) return;
     state.data = clone(lastSavedData);
+    if (state.activeGroup !== 'all' && state.activeGroup !== 'favorites' && !state.data.groups.some(function(g){return g.id === state.activeGroup;})) state.activeGroup = 'all';
     render();
     $('notes').value = state.data.notes;
     $('noteCount').textContent = state.data.notes.length + ' / 10000';
