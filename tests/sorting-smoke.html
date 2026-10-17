@@ -1,0 +1,47 @@
+<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><title>触屏排序回归测试</title></head>
+<body data-test-status="pending"><pre id="result">running</pre><iframe id="site" style="width:980px;height:770px"></iframe>
+<script>
+(async function(){
+  var key='jizhuwangzhan-nav:v1', backup=localStorage.getItem(key);
+  var f=document.getElementById('site'),checks=0;
+  function assert(cond,msg){checks++;if(!cond)throw Error('FAIL: '+msg);}
+  function get(id){return f.contentDocument.getElementById(id);}
+  function tiles(){return Array.from(f.contentDocument.querySelectorAll('.tile[data-link-id]'));}
+  function center(r){return {x:r.left+r.width/2,y:r.top+r.height/2};}
+  function pointer(el,type,x,y){
+    el.dispatchEvent(new f.contentWindow.PointerEvent(type,{bubbles:true,cancelable:true,pointerType:'touch',pointerId:42,clientX:x,clientY:y,isPrimary:true}));
+  }
+  try{
+    localStorage.removeItem(key);
+    await new Promise(function(ok){f.onload=ok;f.src='../index.html?sorting='+Date.now();});
+    assert(tiles().length>=3,'default site icons render');
+    get('settingsButton').click();get('sortMode').click();
+    assert(get('app').classList.contains('sorting'),'sorting CSS enabled');
+    var first=tiles()[0],second=tiles()[1],id1=first.dataset.linkId,id2=second.dataset.linkId;
+    assert(first.draggable,'desktop dragging still enabled');
+    var click=new MouseEvent('click',{bubbles:true,cancelable:true});
+    first.querySelector('.tile-link').dispatchEvent(click);
+    assert(click.defaultPrevented,'sort mode prevents accidental navigation');
+    var p=center(first.getBoundingClientRect()),q=center(second.getBoundingClientRect());
+    pointer(first,'pointerdown',p.x,p.y);
+    pointer(first,'pointermove',q.x,q.y);
+    assert(second.classList.contains('drop-target'),'touch target highlighted');
+    pointer(first,'pointerup',q.x,q.y);
+    assert(tiles()[0].dataset.linkId===id2 && tiles()[1].dataset.linkId===id1,'touch drop changes icon order');
+    assert(JSON.parse(localStorage.getItem(key)).links[0].id===id2,'touch order persisted');
+    var head=tiles()[0],headId=head.dataset.linkId;
+    head.querySelector('.tile-link').dispatchEvent(new KeyboardEvent('keydown',{bubbles:true,cancelable:true,key:'ArrowRight',altKey:true}));
+    assert(tiles()[1].dataset.linkId===headId,'keyboard Alt+Right rearranges icons');
+    assert(f.contentDocument.activeElement===tiles()[1].querySelector('.tile-link'),'keyboard focus retained');
+    get('settingsButton').click();get('sortMode').click();
+    assert(!get('app').classList.contains('sorting'),'sort mode can be disabled');
+    assert(!tiles()[0].draggable,'normal mode disabled dragging');
+    var before=JSON.parse(localStorage.getItem(key)).links.slice(0,3).map(function(x){return x.id;}).join(',');
+    await new Promise(function(ok){f.onload=ok;f.src='../index.html?sorting=reload-'+Date.now();});
+    var after=tiles().slice(0,3).map(function(x){return x.dataset.linkId;}).join(',');
+    assert(before===after,'icon order survives page reload');
+    document.body.dataset.testStatus='PASS';document.getElementById('result').textContent='PASS '+checks+' checks';
+  }catch(e){document.body.dataset.testStatus='FAIL';document.getElementById('result').textContent='FAIL '+checks+' checks: '+(e.stack||e);}
+  finally{if(backup===null)localStorage.removeItem(key);else localStorage.setItem(key,backup);}
+})();
+</script></body></html>
