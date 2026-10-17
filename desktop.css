@@ -1,0 +1,286 @@
+
+/* 记住网站 · 桌面视觉重构
+   设计目标：以壁纸为画布、弱化容器、强化图标与小组件。
+   该样式作为 v1 原样式之上的可撤销覆盖层，保留全部已有功能。 */
+:root { color-scheme: dark; }
+html, body { min-height:100%; }
+body { background:#081529; }
+.app{
+  --text:#f9fbff; --muted:rgba(243,248,255,.76);
+  --glass:rgba(14,30,51,.48); --glass-border:rgba(255,255,255,.16);
+  --panel:rgba(13,26,48,.72); --input-bg:rgba(255,255,255,.14);
+  overflow-x:hidden;
+}
+.app[data-theme=light]{
+  --text:#fff; --muted:rgba(255,255,255,.88);
+  --glass:rgba(255,255,255,.63); --glass-border:rgba(255,255,255,.6);
+  --panel:rgba(17,30,49,.65);
+}
+.backdrop{
+  background-color:#16314e;
+  background-image:
+    linear-gradient(180deg,rgba(9,19,38,.34) 0%,rgba(8,24,46,.12) 42%,rgba(7,16,37,.48) 100%),
+    url("https://images.unsplash.com/photo-1470770841072-f978cf4d019e?auto=format&fit=crop&w=2400&q=85"),
+    radial-gradient(ellipse at 70% 25%,#618ca0,transparent 53%),
+    linear-gradient(140deg,#223c5a,#122744);
+  background-size:cover,cover,cover,cover;
+  background-position:center,center,center,center;
+  transform:translateZ(0);
+}
+.app[data-wallpaper=dusk] .backdrop{
+  background-image:
+    linear-gradient(180deg,rgba(30,12,34,.2),rgba(21,15,39,.54)),
+    url("https://images.unsplash.com/photo-1500534623283-312aade485b7?auto=format&fit=crop&w=2400&q=85"),
+    linear-gradient(135deg,#7e6470,#283a66);
+}
+.app[data-wallpaper=ocean] .backdrop{
+  background-image:
+    linear-gradient(180deg,rgba(8,24,53,.18),rgba(3,20,43,.57)),
+    url("https://images.unsplash.com/photo-1501785888041-af3ef285b470?auto=format&fit=crop&w=2400&q=85"),
+    linear-gradient(135deg,#1a607c,#102b55);
+}
+.app[data-wallpaper=forest] .backdrop{
+  background-image:
+    linear-gradient(180deg,rgba(7,29,30,.13),rgba(4,20,31,.65)),
+    url("https://images.unsplash.com/photo-1448375240586-882707db888b?auto=format&fit=crop&w=2400&q=85"),
+    linear-gradient(130deg,#477866,#17394b);
+}
+.app[data-wallpaper=night] .backdrop{
+  background-image:
+    linear-gradient(180deg,rgba(3,13,38,.36),rgba(4,10,27,.65)),
+    url("https://images.unsplash.com/photo-1519681393784-d120267933ba?auto=format&fit=crop&w=2400&q=85"),
+    linear-gradient(140deg,#233a6b,#080d26);
+}
+.app[data-wallpaper=custom] .backdrop{
+  background-image:linear-gradient(180deg,rgba(10,17,36,.1),rgba(5,16,35,.43)),var(--custom-wallpaper);
+  background-size:cover; background-position:center;
+}
+.backdrop:after{
+  background:radial-gradient(ellipse at 45% 12%,rgba(255,255,255,.11),transparent 52%),
+  linear-gradient(180deg,rgba(5,12,27,.08),transparent 31%,rgba(7,15,30,.22));
+}
+.app[data-theme=light] .backdrop:after{
+  background:linear-gradient(180deg,rgba(0,0,0,.06),transparent 47%,rgba(0,0,0,.12));
+}
+/* 左侧仅保留图标的桌面分组 Dock */
+.sidebar{
+  width:76px; padding:22px 10px 16px; height:100dvh; min-height:540px;
+  background:rgba(10,22,42,.24);
+  backdrop-filter:blur(18px); -webkit-backdrop-filter:blur(18px);
+  border-right:1px solid rgba(255,255,255,.13);
+  box-shadow:5px 0 28px rgba(0,0,0,.06);
+  align-items:center;
+}
+.brand{padding:0 0 32px; justify-content:center;width:100%}
+.brand-mark{
+  width:46px;height:46px;border-radius:17px;
+  background:linear-gradient(140deg,#70a1ff,#8f72ed);
+  box-shadow:0 10px 24px rgba(34,65,129,.3);font-size:25px
+}
+.brand>div:nth-child(2),.side-caption,.group-row .group-name,.group-row .count,.sidebar-quote{display:none}
+.group-nav{width:100%;display:flex;flex-direction:column;align-items:center;gap:10px;max-height:calc(100dvh - 225px)}
+.group-row{
+  width:50px;height:50px;flex:none;justify-content:center; padding:0; border-radius:16px;
+  background:transparent;color:#f8fbff; border:1px solid transparent;
+  transition:background .18s,transform .18s;
+}
+.group-row .group-icon{font-size:21px;width:auto;line-height:1}
+.group-row:hover{transform:translateY(-2px);background:rgba(255,255,255,.19)}
+.group-row.active{
+  color:white;background:rgba(255,255,255,.23);
+  border:1px solid rgba(255,255,255,.23);
+  box-shadow:0 6px 18px rgba(2,8,29,.12),inset 0 0 0 1px rgba(255,255,255,.03)
+}
+.sidebar-add{
+  flex:none;width:49px;height:49px;overflow:hidden;
+  margin:12px 0 0;padding:0;font-size:0;
+  border-radius:15px;background:rgba(255,255,255,.12);
+  border:1px dashed rgba(255,255,255,.4);color:white;
+}
+.sidebar-add:before{content:"+";font-size:27px;line-height:1}
+.side-bottom{width:100%;display:flex;justify-content:center;padding-top:15px}
+.sidebar-settings{
+  width:49px;height:49px;margin:0;padding:0;display:grid;place-items:center;
+  font-size:0;text-align:center;color:white;background:rgba(255,255,255,.1);
+}
+.sidebar-settings:before{content:"⚙";font-size:23px}
+.sidebar-settings span{display:none}
+.main{min-width:0}
+.topbar{height:68px;justify-content:flex-end;padding:10px 29px 0 20px;color:#fff}
+.top-left{display:none}
+.top-actions{gap:9px}
+.top-btn,.icon-button{
+  width:39px;height:39px;padding:0;
+  display:grid;place-items:center;
+  background:rgba(15,27,50,.26);border:1px solid rgba(255,255,255,.15);
+  color:white;border-radius:13px;backdrop-filter:blur(9px)
+}
+.top-btn span{display:none}
+.top-btn:hover,.icon-button:hover{background:rgba(255,255,255,.21)}
+#newLinkTop{width:40px;height:40px;padding:0;display:grid;place-items:center;border-radius:13px;font-size:22px}
+#newLinkTop span{display:none}
+.content{width:min(1150px,calc(100% - 74px));margin:0 auto; flex:1}
+.hero{padding:0 0 32px;text-align:center}
+.hero-eyebrow,.greeting,.hero-hint{display:none}
+.clock{
+  margin:0;font-size:clamp(53px,6vw,74px);font-weight:350;
+  line-height:1.21;letter-spacing:-2px;
+  text-shadow:0 6px 24px rgba(0,0,0,.2);
+}
+.clock span{color:inherit;font-weight:300;margin:0 2px}
+.hero-date{font-size:13px;font-weight:400;letter-spacing:.9px;margin-top:2px;color:rgba(255,255,255,.87);text-shadow:0 2px 10px #0016}
+.search-form{
+  width:min(650px,100%);min-height:54px;padding:6px 7px;
+  margin:27px auto 0;border-radius:50px;
+  background:rgba(245,249,255,.83);border:1px solid rgba(255,255,255,.65);
+  color:#39465b;box-shadow:0 12px 42px rgba(4,20,37,.19),inset 0 1px rgba(255,255,255,.64);
+  backdrop-filter:blur(28px);-webkit-backdrop-filter:blur(28px)
+}
+.engine-wrap select{color:#384a67;font-weight:600;font-size:13px;padding:9px 8px 9px 18px}
+.engine-wrap option{color:#263550}
+.search-divider{background:rgba(70,91,129,.2);margin:0 17px 0 8px}
+.search-form input{color:#26334d;font-size:14px}
+.search-form input::placeholder{color:#748196}
+.search-form kbd{color:#8995a5;border:0;background:#e5eaf0;padding:5px 8px;border-radius:7px}
+.search-go{border-radius:50%;width:40px;height:40px;background:transparent;color:#51637f;font-size:29px}
+.search-go:hover{background:rgba(100,120,152,.13)}
+/* 组件同桌面并置，避免三张夸张的管理后台卡片 */
+.widgets{
+  display:grid;grid-template-columns:1.1fr 1fr 1fr;gap:16px;
+  margin:7px 0 19px;
+}
+.widget{
+  min-height:188px;height:188px;padding:17px 19px;border-radius:20px;
+  background:rgba(18,33,57,.43);border:1px solid rgba(255,255,255,.16);
+  box-shadow:0 10px 32px rgba(0,0,0,.12);
+  backdrop-filter:blur(24px);-webkit-backdrop-filter:blur(24px);
+}
+.widget-label{color:#f5f8ff;font-size:11px;letter-spacing:.25px}
+.quote-widget{background:linear-gradient(122deg,rgba(52,49,100,.84),rgba(73,81,130,.63));}
+.quote-widget h2{font-size:21px;line-height:1.52;margin:14px 0 4px}
+.quote-widget p{font-size:10px;margin:8px 0;color:#e9e7ff}
+.quote-foot{margin-top:8px;padding-top:7px}
+.quote-mark{font-size:61px}
+.month-heading{margin:9px 0 7px}
+.calendar{gap:1px 3px}
+.calendar span{height:17px;font-size:10px}
+.note-widget textarea{font-size:12px;line-height:1.7;min-height:95px;resize:none}
+.note-widget .note-footer{font-size:9px}
+/* 网站像桌面应用图标：单个图标是主体，不要整张网址卡片 */
+.links-section{padding:12px 0 58px}
+.section-toolbar{margin-bottom:10px;min-height:32px}
+.section-title{gap:6px}
+.section-icon{display:none}
+.section-title h2{font-size:13px;font-weight:550;color:rgba(255,255,255,.91);text-shadow:0 2px 8px rgba(0,0,0,.3)}
+.section-title p{display:none}
+.toolbar-actions{gap:8px}
+.toolbar-actions input{width:128px;padding:8px 10px;background:rgba(19,36,60,.27);border-radius:11px;color:#fff;font-size:11px}
+.toolbar-actions input::placeholder{color:#edf4ffb8}
+.subtle-btn{padding:8px 11px;border-radius:11px;background:rgba(12,28,54,.24);color:white;border:1px solid rgba(255,255,255,.18)}
+.subtle-btn:hover,.subtle-btn.active{background:rgba(255,255,255,.22)}
+.tiles{display:grid;grid-template-columns:repeat(9,minmax(0,1fr));gap:13px 8px;justify-items:center}
+.tile{
+  width:100%;height:108px;min-height:108px;padding:9px 2px 5px;
+  background:transparent;border:1px solid transparent;border-radius:18px;
+  color:white;justify-content:start;gap:7px;transition:background .16s,transform .16s;
+}
+.tile:hover{background:rgba(255,255,255,.13);border-color:rgba(255,255,255,.13);transform:translateY(-2px)}
+.tile-link{gap:9px!important;justify-content:flex-start!important}
+.tile-icon{
+  width:61px;height:61px;flex:none;border-radius:18px;
+  display:grid;place-items:center;font-size:24px;font-weight:650;
+  box-shadow:0 7px 18px rgba(6,16,40,.27),inset 0 1px 1px rgba(255,255,255,.18)
+}
+.tile-name{font-size:11px;font-weight:450;line-height:1.3;max-width:100%;text-shadow:0 1px 7px rgba(2,10,25,.8)}
+.favicon-img{width:39px;height:39px;object-fit:contain;border-radius:6px;filter:drop-shadow(0 1px 1px rgba(0,0,0,.1))}
+.tile-icon.has-favicon .favicon-letter{display:none}
+.tile-menu{top:0;right:0;gap:1px;z-index:2}
+.tile-menu button{font-size:11px;background:rgba(13,24,43,.85);border:1px solid #ffffff1d;border-radius:8px;padding:3px 6px}
+.tile-add .tile-icon{width:61px;height:61px;background:rgba(255,255,255,.17);border:1px dashed rgba(255,255,255,.55);font-size:30px}
+.app.compact .tiles{grid-template-columns:repeat(10,minmax(0,1fr));gap:10px}
+.app.compact .tile{height:94px;min-height:94px}
+.app.compact .tile-icon{width:52px;height:52px}
+.app.compact .favicon-img{width:32px;height:32px}
+.app.compact .tile-add .tile-icon{width:52px;height:52px}
+footer{display:none}
+.app.focus .hero{padding-top:20vh}
+.app.focus .search-form{margin-top:35px}
+.app.focus .top-actions #focusButton{background:rgba(255,255,255,.25)}
+/* 对话框保留既有业务操作，但视觉采用桌面半透明面板 */
+.dialog{background:rgba(22,35,58,.96);border:1px solid rgba(255,255,255,.19);border-radius:20px;backdrop-filter:blur(25px)}
+.dialog::backdrop{background:rgba(2,8,23,.6);backdrop-filter:blur(4px)}
+.app[data-theme=light] .tile-name,.app[data-theme=light] .section-title h2{color:white}
+@media(max-width:1280px){
+  .tiles{grid-template-columns:repeat(8,minmax(0,1fr))}
+  .content{width:min(1080px,calc(100% - 60px))}
+}
+@media(max-width:1060px){
+  .tiles{grid-template-columns:repeat(7,minmax(0,1fr))}
+  .widgets{grid-template-columns:1fr 1fr}
+  .note-widget{grid-column:span 2;min-height:150px;height:150px}
+  .note-widget textarea{min-height:70px}
+}
+@media(max-width:850px){
+  .sidebar{
+    width:min(280px,85vw);align-items:stretch;padding:20px 15px;
+    background:rgba(14,29,51,.9);backdrop-filter:blur(32px)
+  }
+  .brand{justify-content:start;padding:0 3px 22px;gap:11px}
+  .brand>div:nth-child(2){display:block}
+  .group-nav{display:grid;max-height:55vh;gap:5px;align-items:stretch}
+  .group-row{width:100%;height:48px;padding:0 14px;justify-content:start;gap:14px}
+  .group-row .group-name,.group-row .count{display:block}
+  .group-row .group-name{flex:1}
+  .sidebar-add{width:auto;margin:10px 5px 0;font-size:12px}
+  .sidebar-add:before{display:none}
+  .side-bottom{justify-content:start;margin-top:auto}
+  .sidebar-settings{width:100%;display:block;text-align:left;font-size:13px;padding:12px}
+  .sidebar-settings:before{display:none}
+  .sidebar-settings span{display:block}
+  .mobile-close{display:block;color:white}
+  .topbar{height:58px;padding:9px 21px 0}
+  .top-left{display:flex;margin-right:auto}
+  .top-left>span{display:none}
+  .mobile-menu{display:grid;place-items:center}
+  .content{width:calc(100% - 48px)}
+  .tiles{grid-template-columns:repeat(6,minmax(0,1fr))}
+}
+@media(max-width:620px){
+  .topbar{height:56px;padding:7px 13px 0}
+  .top-actions{gap:5px}
+  .top-btn{height:37px;width:37px}
+  #newLinkTop{height:37px;width:37px}
+  .content{width:calc(100% - 30px);display:flex;flex-direction:column}
+  .hero{padding:13px 0 27px}
+  .clock{font-size:59px}
+  .hero-date{font-size:12px}
+  .search-form{margin-top:24px;min-height:51px}
+  .search-form .engine-wrap select{max-width:79px;font-size:12px;padding:10px 4px 10px 11px}
+  .search-divider{margin:0 8px}
+  .search-form input{font-size:12px}
+  .search-form kbd{display:none}
+  .widgets{order:2;grid-template-columns:1fr 1fr;gap:10px;margin:22px 0 32px}
+  .quote-widget{grid-column:span 2}
+  .note-widget{grid-column:span 2;height:165px}
+  .widget{padding:16px;height:183px;min-height:183px}
+  .calendar-widget{grid-column:span 2}
+  .links-section{order:1;padding:4px 0 10px}
+  .section-toolbar{margin-bottom:14px}
+  .toolbar-actions{width:auto}
+  .toolbar-actions input{width:105px;min-width:0}
+  .subtle-btn{padding:8px}
+  .tiles{grid-template-columns:repeat(4,minmax(0,1fr));gap:5px 0}
+  .tile{height:101px;min-height:101px;padding:9px 0 4px}
+  .tile-icon,.tile-add .tile-icon{width:55px;height:55px;border-radius:16px;font-size:22px}
+  .favicon-img{width:35px;height:35px}
+  .tile-name{font-size:10px}
+  .tile-menu button{opacity:1;padding:2px 4px}
+  .app.compact .tiles{grid-template-columns:repeat(4,minmax(0,1fr))}
+  .app.compact .tile-icon,.app.compact .tile-add .tile-icon{width:49px;height:49px}
+}
+@media(max-width:360px){
+  .tiles{grid-template-columns:repeat(3,minmax(0,1fr))}
+  .app.compact .tiles{grid-template-columns:repeat(4,minmax(0,1fr))}
+  .section-title h2{font-size:11px}
+}
+@media(prefers-reduced-motion:reduce){.tile,.group-row{transition:none!important}}
