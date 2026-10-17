@@ -39,6 +39,8 @@
     assert(!get('groupDialog').open,'group editor closes after save');
     assert(JSON.parse(localStorage.getItem(key)).groups.some(function(g){return g.name==='测试分类'&&g.icon==='◎';}),'group name and icon persist');
     get('settingsClose').click();
+    var all=Array.from(frame.contentDocument.querySelectorAll('.group-row')).find(function(x){return x.textContent.includes('全部站点');});
+    all.click();
     var previous=localStorage.getItem(key);
     var proto=frame.contentWindow.Storage.prototype;
     var oldSet=proto.setItem;
