@@ -1,0 +1,83 @@
+<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><title>v1.3 数据回归测试</title></head>
+<body data-test-status="pending"><pre id="result">running</pre><iframe id="site" style="width:980px;height:700px"></iframe>
+<script>
+(async function(){
+  var key='jizhuwangzhan-nav:v1';
+  var backup=localStorage.getItem(key);
+  var frame=document.getElementById('site'),checks=0;
+  function assert(ok,desc){checks++;if(!ok)throw Error('FAIL: '+desc);}
+  function get(id){return frame.contentDocument.getElementById(id);}
+  function load(){
+    return new Promise(function(resolve,reject){
+      frame.onload=function(){resolve();};
+      frame.onerror=function(){reject(Error('iframe failed'));};
+      frame.src='../index.html?stability-test='+Date.now()+'-'+checks;
+    });
+  }
+  function submit(form){form.dispatchEvent(new Event('submit',{bubbles:true,cancelable:true}));}
+  try {
+    localStorage.removeItem(key);
+    await load();
+    assert(get('storageRecovery').hidden,'fresh storage does not warn');
+    var favorites=Array.from(frame.contentDocument.querySelectorAll('.group-row')).find(function(x){return x.textContent.includes('我的常用');});
+    assert(!!favorites,'favorites category exists');
+    favorites.click();
+    get('tiles').querySelector('.tile-add').click();
+    assert(get('linkFav').checked,'new link in favorites is favorite by default');
+    get('linkName').value='稳定性测试网址';
+    get('linkUrl').value='https://example.com/v13';
+    submit(get('editForm'));
+    assert(!get('editDialog').open,'link editor closes after successful save');
+    assert(get('tiles').textContent.includes('稳定性测试网址'),'new favorite stays visible');
+    assert(JSON.parse(localStorage.getItem(key)).links.some(function(l){return l.name==='稳定性测试网址'&&l.favorite;}),'favorite persisted correctly');
+    get('settingsButton').click();
+    get('manageAddGroup').click();
+    assert(get('groupDialog').open,'category uses dialog instead of prompt');
+    get('groupName').value='测试分类';
+    get('groupIcon').value='◎';
+    submit(get('groupForm'));
+    assert(!get('groupDialog').open,'group editor closes after save');
+    assert(JSON.parse(localStorage.getItem(key)).groups.some(function(g){return g.name==='测试分类'&&g.icon==='◎';}),'group name and icon persist');
+    get('settingsClose').click();
+    var previous=localStorage.getItem(key);
+    var proto=frame.contentWindow.Storage.prototype;
+    var oldSet=proto.setItem;
+    proto.setItem=function(){throw new DOMException('Quota exceeded','QuotaExceededError');};
+    try {
+      var link=get('tiles').querySelector('.tile-link');
+      link.dispatchEvent(new MouseEvent('contextmenu',{bubbles:true,cancelable:true,clientX:60,clientY:60}));
+      assert(!get('linkContextMenu').hidden,'menu shown before failure');
+      get('contextFav').click();
+      assert(localStorage.getItem(key)===previous,'failed write does not change stored data');
+      assert(get('toast').textContent.includes('保存失败'),'save failure is reported');
+      var actual=JSON.parse(localStorage.getItem(key));
+      var savedLink=actual.links.find(function(l){return l.name==='稳定性测试网址';});
+      assert(!!savedLink&&savedLink.favorite,'last good state remains valid');
+    } finally {proto.setItem=oldSet;}
+    var invalid='{"links":[corrupt-json}';
+    localStorage.setItem(key,invalid);
+    await load();
+    assert(!get('storageRecovery').hidden,'invalid JSON triggers recovery warning');
+    assert(localStorage.getItem(key)===invalid,'corrupted data remains unchanged');
+    assert(get('downloadBrokenData').textContent.includes('原始数据'),'original download action offered');
+    get('tiles').querySelector('.tile-add').click();
+    get('linkName').value='暂不应保存';
+    get('linkUrl').value='https://example.net';
+    submit(get('editForm'));
+    assert(localStorage.getItem(key)===invalid,'blocked write never overwrites original data');
+    assert(get('toast').textContent.includes('保存已暂停'),'blocked write is explained');
+    frame.contentWindow.confirm=function(){return true;};
+    get('resetBrokenData').click();
+    assert(get('storageRecovery').hidden,'explicit reset clears warning');
+    assert(JSON.parse(localStorage.getItem(key)).links.length>0,'explicit reset restores valid defaults');
+    document.body.dataset.testStatus='PASS';
+    document.getElementById('result').textContent='PASS '+checks+' checks';
+  } catch(e){
+    document.body.dataset.testStatus='FAIL';
+    document.getElementById('result').textContent='FAIL '+checks+' checks: '+(e.stack||e);
+  } finally {
+    if(backup===null)localStorage.removeItem(key);
+    else localStorage.setItem(key,backup);
+  }
+})();
+</script></body></html>
