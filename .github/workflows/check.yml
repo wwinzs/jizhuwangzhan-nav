@@ -22,6 +22,7 @@ jobs:
           test -s minimal.css
           test -s tests/ui-smoke.html
           test -s tests/stability-smoke.html
+          test -s tests/sorting-smoke.html
           test -s app.js
           test -s favicon.svg
       - name: Document references
@@ -89,6 +90,14 @@ jobs:
             exit 1
           fi
           grep -oE 'PASS [0-9]+ checks' /tmp/nav-stability-result.html | head -1
+          "$BROWSER" --headless --no-sandbox --disable-gpu --disable-dev-shm-usage --virtual-time-budget=11000 --dump-dom http://127.0.0.1:8766/tests/sorting-smoke.html > /tmp/nav-sorting-result.html 2>/tmp/nav-sorting-chrome.log
+          if ! grep -q 'data-test-status="PASS"' /tmp/nav-sorting-result.html; then
+            echo "::error::Touch and keyboard sorting regression failed"
+            grep -oE 'FAIL [^<]+' /tmp/nav-sorting-result.html || true
+            tail -25 /tmp/nav-sorting-chrome.log || true
+            exit 1
+          fi
+          grep -oE 'PASS [0-9]+ checks' /tmp/nav-sorting-result.html | head -1
       - name: Upload visual screenshots
         if: always()
         uses: actions/upload-artifact@v4
