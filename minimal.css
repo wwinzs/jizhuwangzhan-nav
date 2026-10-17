@@ -100,3 +100,25 @@
 @media(prefers-reduced-motion:reduce){
   .app .sidebar{transition:none}
 }
+
+/* v1.3：数据恢复横幅和分类编辑弹窗 */
+.storage-recovery{
+  position:fixed;z-index:95;top:max(12px,env(safe-area-inset-top));
+  left:50%;transform:translateX(-50%);
+  display:flex;align-items:center;justify-content:space-between;gap:18px;
+  width:min(860px,calc(100vw - 24px));padding:17px 20px;
+  background:rgba(50,31,39,.97);color:#fff;border:1px solid rgba(255,188,170,.6);
+  border-radius:17px;box-shadow:0 20px 48px rgba(0,0,0,.44);
+}
+.storage-recovery[hidden]{display:none!important}
+.storage-recovery strong{display:block;font-size:14px}
+.storage-recovery p{margin:7px 0 0;font-size:12px;line-height:1.65;color:#ffe1d9}
+.recovery-actions{display:flex;flex:none;gap:8px}
+.recovery-actions button{padding:10px 12px;border-radius:10px;border:1px solid #ffffff65;color:#fff;background:#ffffff22;font-size:12px;white-space:nowrap}
+.recovery-actions button:first-child{background:#fff;color:#402b32}
+.group-dialog .dialog-inner{min-width:min(420px,calc(100vw - 44px))}
+@media(max-width:620px){
+  .storage-recovery{flex-direction:column;align-items:stretch;padding:15px}
+  .recovery-actions{justify-content:stretch}
+  .recovery-actions button{flex:1;min-width:0;white-space:normal}
+}
