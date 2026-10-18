@@ -11,6 +11,7 @@
       { id: 'work', name: '效率工具', icon: '⌘' }, { id: 'dev', name: '开发设计', icon: '⚡' },
       { id: 'fun', name: '影音娱乐', icon: '♫' }
     ],
+    folders: [],
     links: [
       ['百度','https://www.baidu.com','daily','百','#5a85f4',true],
       ['哔哩哔哩','https://www.bilibili.com','fun','▶','#e978a2',true],
@@ -33,7 +34,7 @@
     ].map(function (l, i) { return { id: 'link-' + i, name: l[0], url: l[1], groupId: l[2], icon: l[3], color: l[4], favorite: l[5] }; }),
     settings: { theme: 'dark', wallpaper: 'aurora', customWallpaper: '', engine: 'baidu', showWidgets: true, compact: false }
   };
-  var state = { data: null, activeGroup: 'all', editingId: null, sortMode: false, focus: false, monthOffset: 0, contextItemId: null, contextTrigger: null };
+  var state = { data: null, activeGroup: 'all', editingId: null, sortMode: false, focus: false, monthOffset: 0, contextItemId: null, contextTrigger: null, activeFolderId: null, editingFolderId: null };
   var toastTimer;
   var brokenRaw = null;
   var lastSavedData = null;
@@ -63,6 +64,18 @@
       usedGroups.add(key);
       return { id: key, name: str(g.name, 32) || '未命名分类', icon: str(g.icon, 4) || '✦' };
     });
+    var incomingFolders = raw.folders === undefined ? [] : raw.folders;
+    if (!Array.isArray(incomingFolders) || incomingFolders.length > 100) throw Error('文件夹数据异常或超过数量限制');
+    var usedFolders = new Set();
+    var folders = incomingFolders.map(function(f){
+      if (!f || typeof f !== 'object') throw Error('文件夹格式错误');
+      var key = str(f.id,80) || id();
+      while (usedFolders.has(key)) key=id();
+      usedFolders.add(key);
+      return {id:key,name:str(f.name,32)||'未命名文件夹',
+        groupId:usedGroups.has(f.groupId) ? f.groupId : groups[0].id};
+    });
+    var folderMap = new Map(folders.map(function(f){return [f.id,f];}));
     var links = raw.links.map(function (link) {
       if (!link || typeof link !== 'object') throw Error('网站格式错误');
       var url = safeUrl(link.url);
@@ -70,9 +83,12 @@
       var key = str(link.id, 80) || id();
       while (usedLinks.has(key)) key = id();
       usedLinks.add(key);
+      var groupId = usedGroups.has(link.groupId) ? link.groupId : groups[0].id;
+      var folder = typeof link.folderId === 'string' ? folderMap.get(link.folderId) : null;
       return {
         id: key, url: url, name: str(link.name, 40) || new URL(url).hostname,
-        groupId: usedGroups.has(link.groupId) ? link.groupId : groups[0].id,
+        groupId: groupId,
+        folderId: folder && folder.groupId === groupId ? folder.id : null,
         icon: str(link.icon, 4) || '✦',
         color: /^#[a-f0-9]{6}$/i.test(link.color) ? link.color : colorPalette[0],
         favorite: link.favorite === true
@@ -82,7 +98,7 @@
     var wp = ['aurora','dusk','ocean','forest','night','custom'].includes(settings.wallpaper) ? settings.wallpaper : 'aurora';
     var custom = typeof settings.customWallpaper === 'string' && /^data:image\/(?:png|jpeg|webp);base64,[a-z0-9+/=]+$/i.test(settings.customWallpaper) && settings.customWallpaper.length <= 3000000 ? settings.customWallpaper : '';
     return {
-      version: 1, groups: groups, links: links, notes: typeof raw.notes === 'string' ? raw.notes.slice(0, 10000) : '',
+      version: 1, groups: groups, folders: folders, links: links, notes: typeof raw.notes === 'string' ? raw.notes.slice(0, 10000) : '',
       settings: {
         theme: settings.theme === 'light' ? 'light' : 'dark',
         wallpaper: wp === 'custom' && !custom ? 'aurora' : wp, customWallpaper: custom,
