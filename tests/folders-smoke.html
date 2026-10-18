@@ -1,0 +1,78 @@
+<!doctype html><html lang="zh-CN"><head><meta charset="UTF-8"><title>v1.5 文件夹端到端检查</title></head>
+<body data-test-status="pending"><pre id="result">running</pre><iframe id="site" style="width:1100px;height:870px"></iframe>
+<script>
+(async function(){
+ const key='jizhuwangzhan-nav:v1', backup=localStorage.getItem(key), frame=document.getElementById('site');
+ let count=0;
+ function check(value,label){count++;if(!value)throw Error('FAIL '+label);}
+ function get(id){return frame.contentDocument.getElementById(id);}
+ function data(){return JSON.parse(localStorage.getItem(key));}
+ function submit(id){get(id).dispatchEvent(new Event('submit',{bubbles:true,cancelable:true}));}
+ function load(){return new Promise(function(resolve,reject){frame.onload=resolve;frame.onerror=reject;frame.src='../index.html?folder='+Date.now()+'-'+count;});}
+ function folderTile(){return frame.contentDocument.querySelector('.tile-folder[data-folder-id]');}
+ function members(){return Array.from(get('folderContents').querySelectorAll('.folder-entry'));}
+ try{
+   localStorage.removeItem(key);
+   await load();
+   check(!get('storageRecovery').hidden===false,'clean browser does not show recovery');
+   check(!folderTile(),'no folders by default');
+   var add=frame.contentDocument.querySelector('.tile-add-folder');
+   check(!!add,'add folder shortcut exists');
+   add.click();
+   check(get('folderEditDialog').open,'new folder dialog opens');
+   get('folderName').value='项目收藏';
+   submit('folderEditForm');
+   check(!get('folderEditDialog').open,'new folder saves and closes');
+   check(data().folders.length===1 && data().folders[0].name==='项目收藏','folder persisted');
+   check(!!folderTile(),'folder tile shows on desktop');
+   folderTile().click();
+   check(get('folderDialog').open,'folder opens');
+   check(get('folderCount').textContent.includes('0 个'),'empty folder shows zero count');
+   get('folderAddLink').click();
+   check(get('editDialog').open,'adding website within folder opens editor');
+   check(get('linkFolder').value===data().folders[0].id,'new link defaults to open folder');
+   get('linkName').value='文件夹站点甲';
+   get('linkUrl').value='https://example.com/folder-a';
+   submit('editForm');
+   check(data().links.some(function(x){return x.name==='文件夹站点甲' && x.folderId===data().folders[0].id;}),'new link assigned to folder');
+   check(!frame.contentDocument.querySelector('.tile-link[aria-label="打开 文件夹站点甲"]'),'folder link hidden from desktop');
+   folderTile().click();
+   check(members().length===1,'folder contains link after reopen');
+   get('folderAddLink').click();
+   get('linkName').value='文件夹站点乙';
+   get('linkUrl').value='https://example.com/folder-b';
+   submit('editForm');
+   folderTile().click();
+   check(members().length===2,'second link added to folder');
+   var orderBefore=data().links.filter(function(l){return l.folderId===data().folders[0].id;}).map(function(l){return l.id;});
+   members()[1].querySelectorAll('.folder-entry-actions button')[0].click();
+   var orderAfter=data().links.filter(function(l){return l.folderId===data().folders[0].id;}).map(function(l){return l.id;});
+   check(orderBefore[0]===orderAfter[1] && orderBefore[1]===orderAfter[0],'inside-folder up arrow persists reordering');
+   var releasedName=members()[0].querySelector('.folder-entry-name').textContent;
+   members()[0].querySelectorAll('.folder-entry-actions button')[3].click();
+   check(data().links.some(function(l){return l.name===releasedName&&!l.folderId;}),'moving out keeps link and clears folder id');
+   check(!!Array.from(frame.contentDocument.querySelectorAll('.tile-name')).find(function(n){return n.textContent===releasedName;}),'moved-out link appears on desktop');
+   get('folderManage').click();
+   check(get('folderEditDialog').open,'existing folder can be edited');
+   get('folderName').value='重命名收藏';
+   submit('folderEditForm');
+   check(data().folders[0].name==='重命名收藏','rename persists');
+   check(!!folderTile() && folderTile().textContent.includes('重命名收藏'),'tile reflects rename');
+   folderTile().click();get('folderManage').click();
+   frame.contentWindow.confirm=function(){return true;};
+   get('folderDelete').click();
+   check(data().folders.length===0,'folder is deleted');
+   check(data().links.filter(function(l){return l.name.startsWith('文件夹站点');}).every(function(l){return !l.folderId;}),'deleting folder preserves both links on desktop');
+   var old=data(); delete old.folders; old.links.forEach(function(l){delete l.folderId;});
+   localStorage.setItem(key,JSON.stringify(old));
+   await load();
+   check(get('storageRecovery').hidden,'legacy v1.4 JSON loads without recovery banner');
+   check(!folderTile() && frame.contentDocument.querySelectorAll('.tile-link').length>=old.links.length,'legacy links retained and visible');
+   check(get('manageAddFolder')!==null,'folder setting entry available');
+   document.body.dataset.testStatus='PASS';
+   getResult('PASS '+count+' checks');
+ }catch(e){document.body.dataset.testStatus='FAIL';getResult('FAIL '+count+' checks: '+(e.stack||e));}
+ finally{if(backup===null)localStorage.removeItem(key);else localStorage.setItem(key,backup);}
+ function getResult(t){document.getElementById('result').textContent=t;}
+})();
+</script></body></html>
