@@ -23,6 +23,7 @@ jobs:
           test -s tests/ui-smoke.html
           test -s tests/stability-smoke.html
           test -s tests/sorting-smoke.html
+          test -s tests/folders-smoke.html
           test -s app.js
           test -s favicon.svg
       - name: Document references
@@ -98,6 +99,14 @@ jobs:
             exit 1
           fi
           grep -oE 'PASS [0-9]+ checks' /tmp/nav-sorting-result.html | head -1
+          "$BROWSER" --headless --no-sandbox --disable-gpu --disable-dev-shm-usage --virtual-time-budget=12000 --dump-dom http://127.0.0.1:8766/tests/folders-smoke.html > /tmp/nav-folders-result.html 2>/tmp/nav-folders-chrome.log
+          if ! grep -q 'data-test-status="PASS"' /tmp/nav-folders-result.html; then
+            echo "::error::Folder CRUD, ordering or legacy data regression failed"
+            grep -oE 'FAIL [^<]+' /tmp/nav-folders-result.html || true
+            tail -25 /tmp/nav-folders-chrome.log || true
+            exit 1
+          fi
+          grep -oE 'PASS [0-9]+ checks' /tmp/nav-folders-result.html | head -1
       - name: Upload visual screenshots
         if: always()
         uses: actions/upload-artifact@v4
