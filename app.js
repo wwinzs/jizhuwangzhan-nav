@@ -647,6 +647,26 @@
     });
     $('editClose').addEventListener('click',function(){ $('editDialog').close(); }); $('cancelEdit').addEventListener('click',function(){ $('editDialog').close(); });
     $('editForm').addEventListener('submit',saveEdit);
+    $('linkGroup').addEventListener('change',function(){refreshFolderChoices(null);});
+    $('manageAddFolder').addEventListener('click',function(){
+      $('settingsDialog').close();changeFolder();
+    });
+    $('folderEditForm').addEventListener('submit',saveFolder);
+    $('folderEditClose').addEventListener('click',function(){$('folderEditDialog').close();});
+    $('folderCancel').addEventListener('click',function(){$('folderEditDialog').close();});
+    $('folderDelete').addEventListener('click',function(){
+      var folder=state.data.folders.find(function(f){return f.id===state.editingFolderId;});
+      if(folder)deleteFolder(folder);
+    });
+    $('folderClose').addEventListener('click',function(){$('folderDialog').close();});
+    $('folderAddLink').addEventListener('click',function(){
+      var folderId=state.activeFolderId;
+      $('folderDialog').close();openEdit(null,folderId);
+    });
+    $('folderManage').addEventListener('click',function(){
+      var folder=state.data.folders.find(function(f){return f.id===state.activeFolderId;});
+      $('folderDialog').close();if(folder)changeFolder(folder);
+    });
     $('deleteLink').addEventListener('click',function(){
       if (!state.editingId || !confirm('确定删除这个网站吗？')) return;
       state.data.links=state.data.links.filter(function(l){return l.id!==state.editingId;}); if(!save())return; $('editDialog').close(); render(); toast('网站已删除');
