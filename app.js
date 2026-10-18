@@ -368,23 +368,151 @@
     });
     return wrap;
   }
+  function folderTile(folder) {
+    var count=state.data.links.filter(function(l){return l.folderId === folder.id;}).length;
+    var btn=node('button','tile tile-folder');
+    btn.type='button'; btn.dataset.folderId=folder.id;
+    btn.title='打开 '+folder.name+'（'+count+' 个网站）';
+    btn.setAttribute('aria-label',btn.title);
+    btn.append(node('span','tile-icon folder-icon','▤'),node('span','tile-name',folder.name),node('span','folder-count',count+' 个'));
+    btn.addEventListener('click',function(){
+      if(state.sortMode){toast('请先退出图标排序模式再打开文件夹');return;}
+      openFolder(folder.id);
+    });
+    return btn;
+  }
+  function renderFolderContents() {
+    var box=$('folderContents'); box.replaceChildren();
+    var folder=state.data.folders.find(function(f){return f.id===state.activeFolderId;});
+    if(!folder)return;
+    var members=state.data.links.filter(function(l){return l.folderId===folder.id;});
+    $('folderTitle').textContent=folder.name;
+    $('folderCount').textContent=members.length+' 个网站 · '+(state.data.groups.find(function(g){return g.id===folder.groupId;})||{}).name;
+    if(!members.length)box.append(node('p','folder-empty','这里还没有网站，点击下方「添加网站」。'));
+    members.forEach(function(item,i){
+      var row=node('div','folder-entry'), a=node('a','folder-entry-link');
+      a.href=item.url; a.target='_blank'; a.rel='noopener noreferrer';
+      a.append(node('span','folder-entry-icon',item.icon),node('span','folder-entry-name',item.name));
+      var buttons=node('div','folder-entry-actions');
+      function action(label,title,fn){
+        var b=node('button','',label);b.type='button';b.title=title;b.setAttribute('aria-label',title+' '+item.name);
+        b.addEventListener('click',fn);buttons.append(b);
+      }
+      action('↑','上移',function(){
+        if(i===0)return;
+        if(reorderLink(item.id,members[i-1].id))renderFolderContents();
+      });
+      action('↓','下移',function(){
+        if(i>=members.length-1)return;
+        if(reorderLink(item.id,members[i+1].id))renderFolderContents();
+      });
+      action('✎','编辑网站',function(){
+        $('folderDialog').close();openEdit(item);
+      });
+      action('↗','移出文件夹',function(){
+        item.folderId=null;
+        if(save()){render();renderFolderContents();toast('网站已移至桌面');}
+      });
+      row.append(a,buttons);box.append(row);
+    });
+  }
+  function openFolder(folderId) {
+    var folder=state.data.folders.find(function(f){return f.id===folderId;});
+    if(!folder)return;
+    state.activeFolderId=folderId;
+    renderFolderContents();
+    $('folderDialog').showModal();
+  }
+  function renderFolderManager() {
+    var box=$('folderManager');box.replaceChildren();
+    state.data.folders.forEach(function(folder){
+      var row=node('div','manage-row');
+      var count=state.data.links.filter(function(l){return l.folderId===folder.id;}).length;
+      var label=node('span','', '▤  '+folder.name+' · '+count);
+      var edit=node('button','','编辑');
+      edit.type='button';edit.addEventListener('click',function(){
+        $('settingsDialog').close();changeFolder(folder);
+      });
+      row.append(label,edit);box.append(row);
+    });
+    if(!state.data.folders.length)box.append(node('p','folder-empty','还没有文件夹'));
+  }
+  function changeFolder(folder) {
+    state.editingFolderId=folder?folder.id:null;
+    $('folderEditTitle').textContent=folder?'编辑文件夹':'新建文件夹';
+    $('folderName').value=folder?folder.name:'';
+    $('folderError').textContent='';
+    var group=$('folderGroup');group.replaceChildren();
+    state.data.groups.forEach(function(g){
+      var option=node('option','',g.name);option.value=g.id;group.append(option);
+    });
+    group.value=folder?folder.groupId:state.data.groups.some(function(g){return g.id===state.activeGroup;})?state.activeGroup:state.data.groups[0].id;
+    $('folderDelete').hidden=!folder;
+    $('folderEditDialog').showModal();$('folderName').focus();
+  }
+  function saveFolder(e) {
+    e.preventDefault();
+    var name=$('folderName').value.trim(), groupId=$('folderGroup').value;
+    if(!name || name.length>32){$('folderError').textContent='文件夹名称应为 1 至 32 个字符';return;}
+    if(!state.data.groups.some(function(g){return g.id===groupId;})){$('folderError').textContent='请选择有效分类';return;}
+    var existing=state.data.folders.find(function(f){return f.id===state.editingFolderId;});
+    if(state.editingFolderId && !existing){$('folderError').textContent='文件夹不存在，请重新打开';return;}
+    if(existing){
+      existing.name=name;
+      existing.groupId=groupId;
+      state.data.links.forEach(function(l){if(l.folderId===existing.id)l.groupId=groupId;});
+    } else {
+      if(state.data.folders.length>=100){$('folderError').textContent='最多支持 100 个文件夹';return;}
+      existing={id:id(),name:name,groupId:groupId};state.data.folders.push(existing);
+    }
+    if(!save())return;
+    $('folderEditDialog').close();render();toast('文件夹已保存');
+  }
+  function deleteFolder(folder) {
+    if(!confirm('删除「'+folder.name+'」文件夹？里面的网站会回到桌面，不会删除。'))return;
+    state.data.folders=state.data.folders.filter(function(f){return f.id!==folder.id;});
+    state.data.links.forEach(function(l){if(l.folderId===folder.id)l.folderId=null;});
+    if(!save())return;
+    state.activeFolderId=null;
+    $('folderEditDialog').close();render();toast('文件夹已删除，网站已保留');
+  }
+  function refreshFolderChoices(selected) {
+    var list=$('linkFolder'), groupId=$('linkGroup').value;
+    list.replaceChildren();
+    var base=node('option','','桌面（不放入文件夹）');base.value='';list.append(base);
+    state.data.folders.filter(function(f){return f.groupId===groupId;}).forEach(function(folder){
+      var option=node('option','',folder.name);option.value=folder.id;list.append(option);
+    });
+    list.value=selected && Array.from(list.options).some(function(x){return x.value===selected;}) ? selected:'';
+  }
   function renderTiles() {
     hideContext(false);
     var tiles = $('tiles'); tiles.replaceChildren();
     var term = $('filter').value.trim().toLocaleLowerCase();
-    var visible = state.data.links.filter(function (l) {
-      var match = state.activeGroup === 'all' || state.activeGroup === 'favorites' && l.favorite || l.groupId === state.activeGroup;
-      return match && (!term || (l.name + ' ' + l.url).toLocaleLowerCase().includes(term));
+    var scope = function(l) {return state.activeGroup === 'all' || state.activeGroup === 'favorites' && l.favorite || l.groupId === state.activeGroup;};
+    var visible = state.data.links.filter(function(l){
+      return scope(l) && (term ? (l.name+' '+l.url).toLocaleLowerCase().includes(term) :
+        (!l.folderId || state.activeGroup==='favorites'));
     });
-    $('sectionName').textContent = (state.activeGroup === 'all' ? '全部站点' : state.activeGroup === 'favorites' ? '我的常用' : (state.data.groups.find(function (g) { return g.id === state.activeGroup; }) || {}).name || '全部站点') + ' · ' + visible.length;
-    visible.forEach(function (l) { tiles.append(tile(l)); });
+    var folders = !term && state.activeGroup !== 'favorites'
+      ? state.data.folders.filter(function(f){return state.activeGroup==='all'||f.groupId===state.activeGroup;}) : [];
+    var total = state.data.links.filter(scope).length;
+    $('sectionName').textContent = (state.activeGroup === 'all' ? '全部站点' : state.activeGroup === 'favorites' ? '我的常用' : (state.data.groups.find(function (g) { return g.id === state.activeGroup; }) || {}).name || '全部站点') + ' · ' + total;
+    folders.forEach(function(f){tiles.append(folderTile(f));});
+    visible.forEach(function(l){tiles.append(tile(l));});
     if (!term) {
       var add = node('button','tile tile-add'), ico = node('span','tile-icon','＋'), name = node('span','tile-name','添加网站');
       add.append(ico,name); add.addEventListener('click',function () { openEdit(); }); tiles.append(add);
+      if(state.activeGroup!=='favorites'){
+        var addFolder=node('button','tile tile-add tile-add-folder');
+        addFolder.type='button';addFolder.append(node('span','tile-icon','＋'),node('span','tile-name','新建文件夹'));
+        addFolder.addEventListener('click',function(){changeFolder();});
+        tiles.append(addFolder);
+      }
     }
     var hint=document.querySelector('.manage-hint');
     if(hint)hint.textContent=state.sortMode?'排序模式：拖动图标或按 Alt + 方向键':'右键或长按图标进行管理';
-    $('empty').hidden = visible.length > 0 || !term;
+    $('empty').hidden = visible.length > 0 || folders.length > 0 || !term;
   }
   function renderManager() {
     var box = $('groupManager'); box.replaceChildren();
@@ -396,18 +524,20 @@
       buttons.append(rename,remove); row.append(name,buttons); box.append(row);
     });
   }
-  function render() { renderGroups(); renderTiles(); renderManager(); applySettings(); }
+  function render() { renderGroups(); renderTiles(); renderManager(); renderFolderManager(); applySettings(); }
   function groupSelect() {
     var target = $('linkGroup'); target.replaceChildren();
     state.data.groups.forEach(function (g) { var o = node('option','',g.icon + '  ' + g.name); o.value = g.id; target.append(o); });
   }
-  function openEdit(item) {
+  function openEdit(item, preferredFolderId) {
     state.editingId = item ? item.id : null; groupSelect();
     $('dialogTitle').textContent = item ? '编辑网站' : '添加网站';
     $('linkName').value = item ? item.name : ''; $('linkUrl').value = item ? item.url : '';
     $('linkIcon').value = item ? item.icon : '✦'; $('linkColor').value = item ? item.color : '#708cfc';
     $('linkFav').checked = item ? item.favorite : state.activeGroup === 'favorites';
-    $('linkGroup').value = item ? item.groupId : state.data.groups.some(function (g) { return g.id === state.activeGroup; }) ? state.activeGroup : state.data.groups[0].id;
+    var folder = !item && preferredFolderId ? state.data.folders.find(function(f){return f.id===preferredFolderId;}) : null;
+    $('linkGroup').value = item ? item.groupId : folder ? folder.groupId : state.data.groups.some(function (g) { return g.id === state.activeGroup; }) ? state.activeGroup : state.data.groups[0].id;
+    refreshFolderChoices(item ? item.folderId : folder ? folder.id : null);
     $('editError').textContent = ''; $('deleteLink').hidden = !item;
     $('editDialog').showModal(); $('linkName').focus();
   }
@@ -416,7 +546,7 @@
     var name = $('linkName').value.trim(), url = safeUrl($('linkUrl').value);
     if (!name || name.length > 40) { $('editError').textContent = '网站名称应为 1–40 个字符'; return; }
     if (!url) { $('editError').textContent = '请填写有效的 HTTP/HTTPS 地址'; return; }
-    var data = { id: state.editingId || id(), name: name, url: url, icon: $('linkIcon').value.trim().slice(0,4) || '✦', color: $('linkColor').value, groupId: $('linkGroup').value, favorite: $('linkFav').checked };
+    var data = { id: state.editingId || id(), name: name, url: url, icon: $('linkIcon').value.trim().slice(0,4) || '✦', color: $('linkColor').value, groupId: $('linkGroup').value, folderId: $('linkFolder').value || null, favorite: $('linkFav').checked };
     if (state.editingId) { var index = state.data.links.findIndex(function (l) { return l.id === state.editingId; }); if (index >= 0) state.data.links[index] = data; }
     else { if (state.data.links.length >= 500) { $('editError').textContent = '最多只能保存 500 个网站'; return; } state.data.links.push(data); }
     if (!save()) return;
@@ -453,6 +583,7 @@
     if (!confirm('删除「' + group.name + '」分类？网站会移至其他分类，不会丢失。')) return;
     var replacement = state.data.groups.find(function (g) { return g.id !== group.id; }).id;
     state.data.links.forEach(function (l) { if (l.groupId === group.id) l.groupId = replacement; });
+    state.data.folders.forEach(function (f) { if (f.groupId === group.id) f.groupId = replacement; });
     state.data.groups = state.data.groups.filter(function (g) { return g.id !== group.id; });
     if (state.activeGroup === group.id) state.activeGroup = 'all';
     if (!save()) return;
