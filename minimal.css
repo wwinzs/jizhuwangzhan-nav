@@ -137,3 +137,46 @@
 @media(hover:none){
   .app.sorting .tile{min-height:100px}
 }
+
+/* v1.5 原生网站文件夹及管理 */
+.tile-folder{position:relative;cursor:pointer}
+.tile-folder .folder-icon{
+  background:linear-gradient(145deg,rgba(100,153,255,.95),rgba(130,112,238,.94));
+  box-shadow:0 8px 23px rgba(16,36,92,.29);
+  font-size:31px;
+}
+.tile-folder .folder-count{
+  position:absolute;right:2px;top:4px;padding:2px 5px;border-radius:7px;
+  font-size:9px;color:#fff;background:rgba(8,20,41,.62);
+}
+.tile-add-folder .tile-icon{background:rgba(140,165,255,.15);border:1px dashed rgba(255,255,255,.5)}
+.app.sorting .tile-folder{opacity:.75;touch-action:auto;cursor:pointer}
+.folder-dialog{max-width:min(580px,calc(100vw - 22px))}
+.folder-inner{padding:25px;display:flex;flex-direction:column;gap:13px}
+.folder-inner .dialog-head{margin-bottom:0}
+.folder-subtitle{font-size:12px;color:#b9c9e4;margin:0}
+.folder-contents{max-height:min(53vh,440px);min-height:85px;overflow:auto;display:flex;flex-direction:column;gap:6px}
+.folder-empty{font-size:12px;color:rgba(228,237,255,.7);line-height:1.6}
+.folder-entry{
+  min-height:57px;display:flex;gap:8px;align-items:center;justify-content:space-between;
+  padding:6px 9px;border-radius:13px;background:rgba(255,255,255,.065);
+}
+.folder-entry-link{display:flex;align-items:center;gap:11px;min-width:0;flex:1;text-decoration:none;color:#f8faff}
+.folder-entry-icon{display:grid;place-items:center;flex:none;width:38px;height:38px;border-radius:11px;background:rgba(110,147,230,.4);font-size:18px}
+.folder-entry-name{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-size:13px}
+.folder-entry-actions{display:flex;gap:2px;flex:none}
+.folder-entry-actions button{
+  width:32px;height:32px;display:grid;place-items:center;padding:0;
+  color:#eaf0ff;background:transparent;border:0;border-radius:9px;
+}
+.folder-entry-actions button:hover,.folder-entry-actions button:focus-visible{background:rgba(255,255,255,.16)}
+.folder-actions{display:flex;align-items:center;justify-content:flex-end;gap:9px;flex-wrap:wrap;margin-top:8px}
+#folderManager .manage-row{gap:11px}
+#folderManager .manage-row span{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+#folderManager .manage-row button{flex:none}
+@media(max-width:620px){
+ .folder-inner{padding:19px}
+ .folder-entry{padding:6px 4px}
+ .folder-entry-actions button{width:29px;height:34px}
+ .tile-folder .folder-count{font-size:8px}
+}
