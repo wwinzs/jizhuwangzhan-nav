@@ -13,7 +13,9 @@
   <link rel="stylesheet" href="./layout.css">
   <link rel="stylesheet" href="./personalize.css">
   <link rel="stylesheet" href="./data.css">
+  <link rel="stylesheet" href="./auth.css">
   <script src="./app.js" defer></script>
+  <script src="./auth-client.js" defer></script>
 </head>
 <body>
   <div id="app" class="app">
@@ -31,6 +33,7 @@
           <button id="menu" class="icon-button mobile-menu" type="button" aria-label="打开分类" aria-controls="sidebar" aria-expanded="false" title="网站分类">☰</button>
         </div>
         <div class="top-actions">
+          <button id="accountButton" class="top-btn account-entry" type="button" aria-label="账户登录" title="账户" hidden>♙</button>
           <button id="settingsButton" class="top-btn" type="button" aria-label="个性化设置" title="个性化设置">⚙</button>
         </div>
       </header>
@@ -71,6 +74,27 @@
     <button id="contextEdit" type="button" role="menuitem">✎ 编辑网站</button>
     <button id="contextDelete" type="button" role="menuitem" class="context-danger">删除网站</button>
   </div>
+  <dialog id="accountDialog" class="dialog account-dialog" aria-labelledby="accountTitle">
+    <div class="account-content">
+      <div class="dialog-head"><div><small>PRIVATE ACCOUNT</small><h2 id="accountTitle">我的账号</h2></div><button id="accountClose" type="button" class="close" aria-label="关闭账户">×</button></div>
+      <div id="accountSignedOut">
+        <p class="account-explain">登录用于验证身份。当前版本仍只在本机保存收藏、文件夹和壁纸，暂不提供云端同步。</p>
+        <form id="accountLoginForm" class="account-form">
+          <label for="accountEmail">邮箱地址</label>
+          <input id="accountEmail" type="email" required maxlength="254" autocomplete="username" placeholder="owner@example.com">
+          <label for="accountPassword">登录密码</label>
+          <input id="accountPassword" type="password" required minlength="1" maxlength="1024" autocomplete="current-password" placeholder="输入账号密码">
+          <button id="accountLoginSubmit" type="submit" class="primary-btn">登录</button>
+        </form>
+      </div>
+      <div id="accountSignedIn" hidden>
+        <p class="account-explain">已登录为 <strong id="accountIdentity"></strong></p>
+        <p class="account-local-note">账号已验证；本地收藏尚未上传，也不会在登录或退出时被清空。</p>
+        <button id="accountLogout" class="ghost" type="button">退出账号</button>
+      </div>
+      <p id="accountMessage" class="account-message" role="status" aria-live="polite"></p>
+    </div>
+  </dialog>
   <div id="storageRecovery" class="storage-recovery" role="alert" hidden>
     <div><strong>本地导航数据需要恢复</strong><p>检测到当前浏览器的导航数据无法读取。为避免覆盖原始内容，已暂停保存。请先下载原始数据，再选择重置。</p></div>
     <div class="recovery-actions"><button id="downloadBrokenData" type="button">下载原始数据</button><button id="resetBrokenData" type="button">重置并重新启用</button></div>
