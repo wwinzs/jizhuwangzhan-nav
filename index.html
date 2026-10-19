@@ -149,6 +149,17 @@
   </label>
   <div id="widgetManager" class="widget-manager"></div>
 </section>
-<section class="setting-section"><h3>⚙ 分类管理</h3><div id="groupManager"></div><button id="manageAddGroup" class="ghost">＋ 新增分类</button></section><section class="setting-section"><h3>▤ 网站文件夹</h3><p>集中整理常用网站；删除文件夹不会删除里面的网站。</p><div id="folderManager"></div><button id="manageAddFolder" type="button" class="ghost">＋ 新建文件夹</button></section><section class="setting-section"><h3>⇪ 数据备份</h3><p>数据保存在当前浏览器，不会自动跨设备同步。</p><div class="settings-actions"><button id="export" class="ghost">↓ 导出 JSON</button><label class="upload-btn">↑ 导入 JSON<input id="import" type="file" accept=".json,application/json" hidden></label></div><button id="reset" class="reset-btn">恢复全部默认设置</button></section></div></div></dialog>
+<section class="setting-section"><h3>⚙ 分类管理</h3><div id="groupManager"></div><button id="manageAddGroup" class="ghost">＋ 新增分类</button></section><section class="setting-section"><h3>▤ 网站文件夹</h3><p>集中整理常用网站；删除文件夹不会删除里面的网站。</p><div id="folderManager"></div><button id="manageAddFolder" type="button" class="ghost">＋ 新建文件夹</button></section><section class="setting-section">
+  <h3>⇪ 数据管理与备份</h3>
+  <p>数据只保存在当前浏览器。请定期下载完整 JSON 备份，更换浏览器或清理缓存前尤其重要。</p>
+  <div id="storageMeter" class="storage-meter" role="status" aria-live="polite">正在统计本地数据…</div>
+  <div class="settings-actions data-actions">
+    <button id="export" type="button" class="ghost">↓ 导出完整 JSON</button>
+    <label class="upload-btn">↑ 恢复 JSON<input id="import" type="file" accept=".json,application/json" hidden></label>
+    <label class="upload-btn">▤ 导入浏览器书签<input id="bookmarkImport" type="file" accept=".html,text/html" hidden></label>
+  </div>
+  <p id="bookmarkSummary" class="field-hint" aria-live="polite">支持 Chrome、Edge、Firefox 等浏览器导出的书签 HTML。导入时自动去重，原收藏不会覆盖。</p>
+  <button id="reset" class="reset-btn" type="button">恢复全部默认设置</button>
+</section></div></div></dialog>
 </body>
 </html>
