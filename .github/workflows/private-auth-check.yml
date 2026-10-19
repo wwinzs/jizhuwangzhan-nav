@@ -1,0 +1,97 @@
+name: Private auth backend CI
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'server/**'
+      - '.github/workflows/private-auth-check.yml'
+  pull_request:
+    paths:
+      - 'server/**'
+      - '.github/workflows/private-auth-check.yml'
+  workflow_dispatch:
+jobs:
+  php-mysql-auth:
+    runs-on: ubuntu-latest
+    services:
+      mysql:
+        image: mysql:8.0
+        env:
+          MYSQL_ROOT_PASSWORD: integration_only_password
+          MYSQL_DATABASE: nav_ci
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping --silent"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=12
+    steps:
+      - uses: actions/checkout@v4
+      - name: PHP runtime and MySQL client
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq php-cli php-mysql default-mysql-client >/dev/null
+      - name: PHP lint and password primitives
+        run: |
+          set -eu
+          for file in server/src/*.php server/public/*.php server/scripts/*.php server/tests/*.php; do
+            php -l "$file"
+          done
+          php server/tests/security.php
+      - name: Initialize isolated MySQL test environment
+        run: |
+          set -eu
+          cat > server/config.local.php <<'PHP'
+          <?php
+          return [
+            'db_dsn' => 'mysql:host=127.0.0.1;port=3306;dbname=nav_ci;charset=utf8mb4',
+            'db_user' => 'root',
+            'db_password' => 'integration_only_password',
+            'frontend_origin' => 'http://127.0.0.1:8766',
+            'app_key' => str_repeat('a',64),
+            'require_https' => false,
+          ];
+          PHP
+          MYSQL_PWD=integration_only_password mysql -h 127.0.0.1 -u root nav_ci < server/schema.sql
+          printf '%s\n%s\n' 'a very long CI password 987654!' 'a very long CI password 987654!' |
+            php server/scripts/create-owner.php owner@example.com
+          if printf '%s\n%s\n' 'a very long CI password 987654!' 'a very long CI password 987654!' |
+            php server/scripts/create-owner.php second@example.com; then
+            echo "::error::Second owner account unexpectedly created"
+            exit 1
+          fi
+      - name: Live HTTP authentication regression
+        run: |
+          set -eu
+          php -S 127.0.0.1:8767 -t server/public server/public/index.php >/tmp/nav-auth-http.log 2>&1 &
+          curl --fail --retry 15 --retry-delay 1 --retry-connrefused http://127.0.0.1:8767/health
+          API=http://127.0.0.1:8767
+          ORIGIN=http://127.0.0.1:8766
+          LOGIN='{"email":"owner@example.com","password":"a very long CI password 987654!"}'
+          CODE=$(curl -sS -o /tmp/auth-body -w '%{http_code}' -H 'Content-Type: application/json' -d "$LOGIN" "$API/auth/login")
+          test "$CODE" = 403
+          CODE=$(curl -sS -o /tmp/auth-body -w '%{http_code}' -H "Origin: $ORIGIN" -H 'Content-Type: application/json' -d '{"email":"owner@example.com","password":"wrong"}' "$API/auth/login")
+          test "$CODE" = 401
+          CODE=$(curl -sS -D /tmp/auth-headers -o /tmp/auth-body -w '%{http_code}' -H "Origin: $ORIGIN" -H 'Content-Type: application/json' -d "$LOGIN" "$API/auth/login")
+          test "$CODE" = 200
+          grep -q '"owner@example.com"' /tmp/auth-body
+          grep -iq 'HttpOnly' /tmp/auth-headers
+          grep -iq 'SameSite=Strict' /tmp/auth-headers
+          grep -iq 'Secure' /tmp/auth-headers
+          TOKEN=$(sed -n -E 's/^[Ss]et-[Cc]ookie: __Host-nav_session=([a-f0-9]{64});.*$/\1/p' /tmp/auth-headers | head -1)
+          test "${#TOKEN}" -eq 64
+          CODE=$(curl -sS -o /tmp/me-body -w '%{http_code}' -b "__Host-nav_session=$TOKEN" "$API/auth/me")
+          test "$CODE" = 200
+          grep -q '"owner@example.com"' /tmp/me-body
+          CODE=$(curl -sS -o /tmp/auth-body -w '%{http_code}' -b "__Host-nav_session=$TOKEN" -H 'Origin: https://evil.example' -X POST "$API/auth/logout")
+          test "$CODE" = 403
+          CODE=$(curl -sS -o /tmp/auth-body -w '%{http_code}' -b "__Host-nav_session=$TOKEN" -H "Origin: $ORIGIN" -X POST "$API/auth/logout")
+          test "$CODE" = 200
+          CODE=$(curl -sS -o /tmp/auth-body -w '%{http_code}' -b "__Host-nav_session=$TOKEN" "$API/auth/me")
+          test "$CODE" = 401
+          for i in $(seq 1 12); do
+            CODE=$(curl -sS -o /tmp/auth-body -w '%{http_code}' -H "Origin: $ORIGIN" -H 'Content-Type: application/json' -d '{"email":"owner@example.com","password":"wrong"}' "$API/auth/login")
+          done
+          test "$CODE" = 429
+          echo 'Private login, session, CSRF, logout and rate-limit regressions passed'
