@@ -1,0 +1,80 @@
+<!doctype html><html lang="zh-CN"><head><meta charset="UTF-8"><title>v1.8 Data integrity checks</title></head>
+<body data-test-status="pending"><pre id="result">Running</pre><iframe id="site" style="width:1100px;height:850px"></iframe>
+<script>
+(async function(){
+  const key='jizhuwangzhan-nav:v1',original=localStorage.getItem(key),f=document.getElementById('site');
+  let checks=0,downloads=0;
+  function ok(v,m){checks++;if(!v)throw Error('FAIL '+m);}
+  function el(id){return f.contentDocument.getElementById(id);}
+  function saved(){return JSON.parse(localStorage.getItem(key));}
+  function sleep(ms){return new Promise(r=>setTimeout(r,ms));}
+  function reload(){return new Promise((resolve,reject)=>{f.onload=resolve;f.onerror=reject;f.src='../index.html?data-test='+Date.now()+'-'+checks;});}
+  async function importFile(id,filename,type,content){
+    const dt=new f.contentWindow.DataTransfer(),file=new f.contentWindow.File([content],filename,{type});
+    dt.items.add(file);el(id).files=dt.files;
+    el(id).dispatchEvent(new Event('change',{bubbles:true}));await sleep(250);
+  }
+  const html=`<!DOCTYPE NETSCAPE-Bookmark-file-1><META HTTP-EQUIV="Content-Type" CONTENT="text/html; charset=UTF-8">
+  <DL><p>
+    <DT><H3>我的研究</H3><DL><p>
+      <DT><A HREF="https://example.org/first">第一个网站</A>
+      <DT><A HREF="https://example.org/second">第二个网站</A>
+      <DT><A HREF="javascript://bad">不安全的网站</A>
+    </DL><p>
+    <DT><H3>开发设计</H3><DL><p>
+      <DT><A HREF="https://github.com">重复GitHub</A>
+    </DL><p>
+  </DL><p>`;
+  try {
+    localStorage.removeItem(key);
+    await reload();
+    ok(el('storageMeter').textContent.includes('18 个网站'),'initial storage meter counts links');
+    ok(el('bookmarkImport') && el('export') && el('import'),'backup and import controls exist');
+    f.contentWindow.confirm=()=>true;
+    el('settingsButton').click();
+    await importFile('bookmarkImport','bookmarks.html','text/html',html);
+    ok(saved().links.length===20,'import appends exactly two new bookmarks');
+    ok(saved().groups.some(g=>g.name==='我的研究'),'bookmark folder creates category');
+    const research=saved().groups.find(g=>g.name==='我的研究');
+    ok(saved().links.filter(l=>l.groupId===research.id&&l.url.includes('example.org')).length===2,'new bookmarks assigned to intended category');
+    ok(saved().links.filter(l=>l.url==='https://github.com/').length===1,'duplicate bookmark URL not added');
+    ok(!saved().links.some(l=>l.name==='不安全的网站'),'non http(s) links ignored');
+    ok(el('storageMeter').textContent.includes('20 个网站'),'storage meter updates after import');
+    ok(el('bookmarkSummary').textContent.includes('跳过 1 个重复'),'user sees duplicate summary');
+    el('settingsButton').click();
+    ok(!el('settingsDialog').open===false,'settings can reopen');
+    await importFile('bookmarkImport','same.html','text/html',html);
+    ok(saved().links.length===20,'reimport is idempotent');
+    const beforeConflict=saved();
+    const altered=JSON.parse(JSON.stringify(beforeConflict));
+    altered.notes='另一个标签页修改的笔记';
+    localStorage.setItem(key,JSON.stringify(altered));
+    el('notes').value='即将冲突的修改';
+    el('notes').dispatchEvent(new Event('input',{bubbles:true}));
+    ok(saved().notes==='另一个标签页修改的笔记','cross tab write never replaces externally modified data');
+    ok(el('toast').textContent.includes('另一个标签页'),'user receives conflict explanation');
+    await reload();
+    ok(el('notes').value==='另一个标签页修改的笔记','reload reads updated external data');
+    ok(el('storageRecovery').hidden,'data changes do not trigger corruption recovery');
+    el('settingsButton').click();
+    const canvas=f.contentDocument.createElement('canvas');canvas.width=620;canvas.height=620;
+    const ctx=canvas.getContext('2d');
+    const pix=ctx.createImageData(620,620);let n=1701;
+    for(let i=0;i<pix.data.length;i+=4){
+      n=(1664525*n+1013904223)>>>0;
+      pix.data[i]=n&255;pix.data[i+1]=(n>>8)&255;pix.data[i+2]=(n>>16)&255;pix.data[i+3]=255;
+    }
+    ctx.putImageData(pix,0,0);
+    const blob=await new Promise(resolve=>canvas.toBlob(resolve,'image/png'));
+    ok(blob.size>240000 && blob.size<2000000,'test wallpaper crosses compression threshold');
+    await importFile('wallpaperUpload','large-wallpaper.png','image/png',blob);
+    ok(saved().settings.wallpaper==='custom','large image is saved as custom wallpaper');
+    ok(saved().settings.customWallpaper.startsWith('data:image/webp;base64,'),'large wallpaper compressed to WebP');
+    ok(saved().settings.customWallpaper.length<Math.round(blob.size*4/3),'wallpaper optimization saves browser storage');
+    ok(el('storageMeter').textContent.includes('MB')||el('storageMeter').textContent.includes('KB'),'updated data usage is visible');
+    document.body.dataset.testStatus='PASS';
+    document.getElementById('result').textContent='PASS '+checks+' checks';
+  }catch(err){document.body.dataset.testStatus='FAIL';document.getElementById('result').textContent='FAIL '+checks+' checks: '+(err.stack||err);}
+  finally {if(original===null)localStorage.removeItem(key);else localStorage.setItem(key,original);}
+})();
+</script></body></html>
