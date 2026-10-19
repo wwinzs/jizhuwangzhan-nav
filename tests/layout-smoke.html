@@ -1,0 +1,76 @@
+<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><title>v1.6 Desktop layout tests</title></head>
+<body data-test-status="pending"><pre id="result">Starting browser tests</pre><iframe id="site" style="width:1130px;height:840px"></iframe>
+<script>
+(async function(){
+ var key='jizhuwangzhan-nav:v1', backup=localStorage.getItem(key),frame=document.getElementById('site'),checks=0;
+ function check(ok,msg){checks++;if(!ok)throw Error('FAIL '+msg);}
+ function el(id){return frame.contentDocument.getElementById(id);}
+ function dataset(){return JSON.parse(localStorage.getItem(key));}
+ function refresh(){return new Promise(function(resolve,reject){frame.onload=resolve;frame.onerror=reject;frame.src='../index.html?layout-smoke='+Date.now()+'-'+checks;});}
+ function buttons(){return Array.from(frame.contentDocument.querySelectorAll('.tile[data-layout-key]'));}
+ try {
+  localStorage.removeItem(key);await refresh();
+  check(!el('layoutToolbar').hidden===false,'toolbar hidden in default auto mode');
+  check(!el('tiles').classList.contains('layout-grid'),'default grid is auto');
+  check(dataset()===null,'fresh defaults are not stored until change');
+  el('settingsButton').click();
+  check(el('layoutEdit')!==null && el('layoutAutoTidy')!==null,'layout controls available');
+  check(el('widgetManager').querySelectorAll('.widget-manager-row').length===3,'three configurable widgets');
+  var rows=Array.from(el('widgetManager').querySelectorAll('.widget-manager-row'));
+  rows[2].querySelector('button.widget-reorder').click();
+  check(dataset().layout.widgets.order[1]==='note','widget upward reordering persisted');
+  var note=el('widgets').querySelector('.note-widget');
+  var widgetTypes=Array.from(el('widgets').children).map(function(x){return x.dataset.widget;});
+  check(widgetTypes[1]==='note','widget reorders in actual DOM');
+  rows=Array.from(el('widgetManager').querySelectorAll('.widget-manager-row'));
+  var noteRow=rows[1],sz=noteRow.querySelector('select');
+  sz.value='wide';sz.dispatchEvent(new Event('change',{bubbles:true}));
+  check(dataset().layout.widgets.sizes.note==='wide','widget size persisted');
+  check(note.classList.contains('widget-size-wide'),'widget size visibly applied');
+  rows=Array.from(el('widgetManager').querySelectorAll('.widget-manager-row'));
+  var show=rows[0].querySelector('input[type=checkbox]');
+  show.checked=false;show.dispatchEvent(new Event('change',{bubbles:true}));
+  check(el('widgets').querySelector('.quote-widget').hidden,'individual widget visibility works');
+  el('widgetPlacement').value='above';el('widgetPlacement').dispatchEvent(new Event('change',{bubbles:true}));
+  check(el('app').classList.contains('widgets-above'),'widget position toggles app class');
+  check(dataset().layout.widgets.placement==='above','widget placement saved');
+  el('layoutEdit').click();
+  check(!el('settingsDialog').open,'layout editor closes settings');
+  check(!el('layoutToolbar').hidden,'layout toolbar visible');
+  check(dataset().layout.mode==='manual','manual mode persisted');
+  check(el('tiles').classList.contains('layout-grid'),'desktop slots use manual grid');
+  check(buttons().length>4,'links and folders use layout tile keys');
+  var first=buttons()[0],firstKey=first.dataset.layoutKey;
+  first.click();
+  check(first.classList.contains('tile-layout-selected'),'selected site highlighted');
+  var slot=Array.from(frame.contentDocument.querySelectorAll('.tile-slot')).find(function(x){return Number(x.dataset.layoutSlot)>21;});
+  check(!!slot,'empty desktop slot exists');
+  var target=Number(slot.dataset.layoutSlot);
+  slot.click();
+  check(dataset().layout.positions[firstKey]===target,'icon moved to chosen empty position');
+  check(!el('layoutToolbar').hidden,'layout stays editable after moving');
+  el('layoutDone').click();
+  check(el('layoutToolbar').hidden,'finished editor hides toolbar');
+  check(el('tiles').classList.contains('layout-grid'),'manual layout stays active after exiting editor');
+  var saved=dataset().layout.positions[firstKey];
+  await refresh();
+  check(dataset().layout.mode==='manual','manual mode survives reload');
+  var found=Array.from(frame.contentDocument.querySelectorAll('.tile[data-layout-key]')).find(function(x){return x.dataset.layoutKey===firstKey;});
+  check(!!found && Number(found.dataset.layoutSlot)===saved,'position survives reload');
+  frame.contentWindow.confirm=function(){return true;};
+  el('settingsButton').click();el('layoutAutoTidy').click();
+  check(dataset().layout.mode==='auto','auto tidy restores normal mode');
+  check(Object.keys(dataset().layout.positions).length===0,'auto tidy removes saved holes');
+  check(!el('tiles').classList.contains('layout-grid'),'auto tidy changes grid');
+  var legacy=dataset();delete legacy.layout;localStorage.setItem(key,JSON.stringify(legacy));await refresh();
+  el('settingsButton').click();
+  check(el('widgetManager').querySelectorAll('.widget-manager-row').length===3,'old backups receive default widget preferences');
+  check(!el('app').classList.contains('widgets-above'),'old backups use widgets below shortcuts');
+  el('settingsClose').click();
+  frame.style.width='390px';frame.contentWindow.dispatchEvent(new Event('resize'));
+  check(!el('tiles').classList.contains('layout-grid'),'mobile width uses responsive auto grid');
+  document.body.dataset.testStatus='PASS';document.getElementById('result').textContent='PASS '+checks+' checks';
+ }catch(e){document.body.dataset.testStatus='FAIL';document.getElementById('result').textContent='FAIL '+checks+' checks: '+(e.stack||e);}
+ finally{if(backup===null)localStorage.removeItem(key);else localStorage.setItem(key,backup);}
+})();
+</script></body></html>
