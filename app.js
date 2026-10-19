@@ -518,6 +518,225 @@
     });
     list.value=selected && Array.from(list.options).some(function(x){return x.value===selected;}) ? selected:'';
   }
+  function desktopKeys() {
+    return state.data.folders.map(function(f){return 'f:'+f.id;})
+      .concat(state.data.links.filter(function(l){return !l.folderId;}).map(function(l){return 'l:'+l.id;}));
+  }
+  function desktopManual() {
+    return state.data.layout.mode==='manual' && state.activeGroup==='all' &&
+      !$('filter').value.trim() && window.matchMedia('(min-width: 851px)').matches;
+  }
+  function layoutColumns() {
+    var template=getComputedStyle($('tiles')).gridTemplateColumns;
+    return Math.max(1,template.split(' ').filter(Boolean).length);
+  }
+  function positionsFor(keys) {
+    var saved=state.data.layout.positions, result=Object.create(null), used=new Set();
+    keys.forEach(function(key){
+      var n=saved[key];
+      if(Number.isInteger(n)&&n>=0&&n<2000&&!used.has(n)){
+        result[key]=n;used.add(n);
+      }
+    });
+    keys.forEach(function(key){
+      if(result[key]!==undefined)return;
+      var n=0;while(used.has(n))n++;
+      result[key]=n;used.add(n);
+    });
+    return result;
+  }
+  function moveToSlot(key,slot) {
+    if (!state.layoutEditing || !desktopManual() || !Number.isInteger(slot) || slot<0 || slot>=2000)return false;
+    var keys=desktopKeys();
+    if(!keys.includes(key))return false;
+    var current=positionsFor(keys), from=current[key];
+    if(from===slot)return true;
+    var other=keys.find(function(x){return x!==key && current[x]===slot;});
+    current[key]=slot;
+    if(other)current[other]=from;
+    state.data.layout.positions=current;
+    if(!save())return false;
+    renderTiles();
+    return true;
+  }
+  function selectLayoutTile(key) {
+    if(!state.layoutEditing || !desktopManual())return;
+    if(state.layoutSelected && state.layoutSelected!==key){
+      var positions=positionsFor(desktopKeys());
+      if(moveToSlot(state.layoutSelected,positions[key])){state.layoutSelected=null;renderTiles();}
+      return;
+    }
+    state.layoutSelected=state.layoutSelected===key?null:key;
+    highlightSelection();
+  }
+  function highlightSelection() {
+    document.querySelectorAll('.tile-layout-selected').forEach(function(el){el.classList.remove('tile-layout-selected');});
+    if(!state.layoutSelected)return;
+    var list=Array.from(document.querySelectorAll('#tiles [data-layout-key]'));
+    var target=list.find(function(el){return el.dataset.layoutKey===state.layoutSelected;});
+    if(target)target.classList.add('tile-layout-selected');
+  }
+  function attachLayoutHandlers(el,key) {
+    if(!state.layoutEditing || !desktopManual())return;
+    el.dataset.layoutKey=key;el.draggable=true;
+    el.addEventListener('click',function(e){e.preventDefault();selectLayoutTile(key);});
+    el.addEventListener('dragstart',function(e){
+      if(!e.dataTransfer)return;
+      e.dataTransfer.effectAllowed='move';
+      e.dataTransfer.setData('text/plain','desktop:'+key);
+      el.classList.add('dragging');
+      state.layoutSelected=key;
+    });
+    el.addEventListener('dragend',function(){el.classList.remove('dragging');});
+    el.addEventListener('dragover',function(e){e.preventDefault();});
+    el.addEventListener('drop',function(e){
+      e.preventDefault();if(!e.dataTransfer)return;
+      var data=e.dataTransfer.getData('text/plain');
+      if(!data.startsWith('desktop:'))return;
+      var keySource=data.slice(8),target=positionsFor(desktopKeys())[key];
+      if(moveToSlot(keySource,target))state.layoutSelected=null;
+    });
+    var tracking=false, candidate=null;
+    el.addEventListener('pointerdown',function(e){
+      if(e.pointerType!=='touch' && e.pointerType!=='pen')return;
+      e.preventDefault();tracking=true;candidate=null;
+      try{el.setPointerCapture(e.pointerId);}catch(_){}
+    });
+    el.addEventListener('pointermove',function(e){
+      if(!tracking)return;
+      e.preventDefault();
+      var target=document.elementFromPoint(e.clientX,e.clientY);
+      var node=target && target.closest('[data-layout-slot]');
+      candidate=node?Number(node.dataset.layoutSlot):null;
+      document.querySelectorAll('.layout-drop-target').forEach(function(t){t.classList.remove('layout-drop-target');});
+      if(node && node!==el)node.classList.add('layout-drop-target');
+    });
+    function finish(e,cancelled){
+      if(!tracking)return;
+      tracking=false;
+      document.querySelectorAll('.layout-drop-target').forEach(function(t){t.classList.remove('layout-drop-target');});
+      try{if(el.hasPointerCapture(e.pointerId))el.releasePointerCapture(e.pointerId);}catch(_){}
+      if(!cancelled && candidate!==null && moveToSlot(key,candidate))state.layoutSelected=null;
+      candidate=null;
+    }
+    el.addEventListener('pointerup',function(e){finish(e,false);});
+    el.addEventListener('pointercancel',function(e){finish(e,true);});
+    el.addEventListener('keydown',function(e){
+      if(!e.altKey || !['ArrowLeft','ArrowRight','ArrowUp','ArrowDown'].includes(e.key))return;
+      e.preventDefault();e.stopPropagation();
+      var map=positionsFor(desktopKeys()),col=layoutColumns();
+      var delta=e.key==='ArrowLeft'?-1:e.key==='ArrowRight'?1:e.key==='ArrowUp'?-col:col;
+      var slot=map[key]+delta;
+      if(slot<0 || slot>=2000)return;
+      if((e.key==='ArrowLeft' && map[key]%col===0) || (e.key==='ArrowRight' && map[key]%col===col-1))return;
+      if(moveToSlot(key,slot)){
+        var next=Array.from(document.querySelectorAll('[data-layout-key]')).find(function(n){return n.dataset.layoutKey===key;});
+        if(next)(next.querySelector('.tile-link')||next).focus();
+      }
+    });
+  }
+  function layoutSlot(slot) {
+    var button=node('button','tile-slot');
+    button.type='button';button.dataset.layoutSlot=String(slot);
+    button.setAttribute('aria-label','空白位置 '+(slot+1));
+    button.title='放置图标到此位置';
+    var col=layoutColumns();
+    button.style.gridColumnStart=String(slot%col+1);
+    button.style.gridRowStart=String(Math.floor(slot/col)+1);
+    button.addEventListener('click',function(){
+      if(state.layoutSelected){
+        if(moveToSlot(state.layoutSelected,slot))state.layoutSelected=null;
+      }else toast('请先点击一个网站或文件夹图标');
+    });
+    button.addEventListener('dragover',function(e){e.preventDefault();button.classList.add('layout-drop-target');});
+    button.addEventListener('dragleave',function(){button.classList.remove('layout-drop-target');});
+    button.addEventListener('drop',function(e){
+      e.preventDefault();button.classList.remove('layout-drop-target');
+      if(!e.dataTransfer)return;
+      var data=e.dataTransfer.getData('text/plain');
+      if(data.startsWith('desktop:') && moveToSlot(data.slice(8),slot))state.layoutSelected=null;
+    });
+    return button;
+  }
+  function autoTidy() {
+    state.data.layout.mode='auto';
+    state.data.layout.positions={};
+    state.layoutEditing=false;state.layoutSelected=null;
+    if(!save())return;
+    $('layoutToolbar').hidden=true;
+    applySettings();renderTiles();toast('已自动整理为紧凑网格');
+  }
+  function startLayoutEdit() {
+    if(!window.matchMedia('(min-width: 851px)').matches){
+      toast('自由摆放适用于电脑宽屏；手机可使用图标排序');
+      return;
+    }
+    state.activeGroup='all';state.sortMode=false;state.layoutSelected=null;
+    state.data.layout.mode='manual';
+    if(!save())return;
+    state.layoutEditing=true;
+    $('settingsDialog').close();
+    $('filter').value='';$('filter').hidden=true;
+    $('filterToggle').setAttribute('aria-expanded','false');
+    $('sortMode').classList.remove('active');
+    $('sortMode').textContent='⇅ 图标排序';
+    $('layoutToolbar').hidden=false;
+    render();toast('自由排列模式：点选图标后点空位，也可拖动');
+    $('linksSection').scrollIntoView({behavior:'smooth',block:'start'});
+  }
+  function finishLayoutEdit() {
+    state.layoutEditing=false;state.layoutSelected=null;
+    $('layoutToolbar').hidden=true;
+    applySettings();renderTiles();
+    toast('桌面布局已保存');
+  }
+  function renderWidgetSettings() {
+    var box=$('widgetManager');box.replaceChildren();
+    var meta={quote:'今日灵感',calendar:'轻日历',note:'随手记'};
+    var prefs=state.data.layout.widgets;
+    $('widgetPlacement').value=prefs.placement;
+    prefs.order.forEach(function(name,index){
+      var row=node('div','widget-manager-row');
+      var label=node('span','widget-manager-name',meta[name]);
+      var visible=node('input');visible.type='checkbox';visible.checked=prefs.visible[name];visible.setAttribute('aria-label','显示'+meta[name]);
+      visible.addEventListener('change',function(){
+        prefs.visible[name]=visible.checked;
+        if(save()){applySettings();renderWidgetSettings();}
+      });
+      var size=node('select','widget-size-select');size.setAttribute('aria-label',meta[name]+'尺寸');
+      [['compact','紧凑'],['normal','标准'],['wide','宽版']].forEach(function(pair){
+        var opt=node('option','',pair[1]);opt.value=pair[0];size.append(opt);
+      });
+      size.value=prefs.sizes[name];
+      size.addEventListener('change',function(){
+        prefs.sizes[name]=size.value;
+        if(save()){applySettings();renderWidgetSettings();}
+      });
+      function move(diff){
+        var next=index+diff;if(next<0 || next>=prefs.order.length)return;
+        prefs.order.splice(index,1);prefs.order.splice(next,0,name);
+        if(save()){applySettings();renderWidgetSettings();}
+      }
+      var up=node('button','widget-reorder','↑');up.type='button';up.title='向前移动 '+meta[name];
+      up.setAttribute('aria-label',up.title);up.disabled=index===0;up.addEventListener('click',function(){move(-1);});
+      var down=node('button','widget-reorder','↓');down.type='button';down.title='向后移动 '+meta[name];
+      down.setAttribute('aria-label',down.title);down.disabled=index===prefs.order.length-1;down.addEventListener('click',function(){move(1);});
+      row.append(label,visible,size,up,down);box.append(row);
+    });
+  }
+  function applyWidgetLayout() {
+    var prefs=state.data.layout.widgets,wrap=$('widgets');
+    var classes={quote:'.quote-widget',calendar:'.calendar-widget',note:'.note-widget'};
+    prefs.order.forEach(function(name){
+      var widget=wrap.querySelector(classes[name]);if(!widget)return;
+      widget.dataset.widget=name;
+      widget.classList.remove('widget-size-normal','widget-size-compact','widget-size-wide');
+      widget.classList.add('widget-size-'+prefs.sizes[name]);
+      widget.hidden=!prefs.visible[name];wrap.append(widget);
+    });
+    wrap.hidden=!state.data.settings.showWidgets || !prefs.order.some(function(name){return prefs.visible[name];});
+    $('app').classList.toggle('widgets-above',prefs.placement==='above');
+  }
   function renderTiles() {
     hideContext(false);
     var tiles = $('tiles'); tiles.replaceChildren();
