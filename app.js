@@ -41,10 +41,12 @@
       ['YouTube','https://www.youtube.com','fun','▶','#df6672',false],
       ['抖音','https://www.douyin.com','fun','♪','#343e52',false]
     ].map(function (l, i) { return { id: 'link-' + i, name: l[0], url: l[1], groupId: l[2], icon: l[3], color: l[4], favorite: l[5] }; }),
-    settings: { theme: 'dark', wallpaper: 'aurora', customWallpaper: '', engine: 'baidu', showWidgets: true, compact: false }
+    settings: { theme: 'dark', wallpaper: 'aurora', customWallpaper: '', wallpaperDim:20, wallpaperBlur:0, engine: 'baidu', customEngineUrl:'', showWidgets: true, compact: false }
   };
   var state = { data: null, activeGroup: 'all', editingId: null, sortMode: false, focus: false, monthOffset: 0, contextItemId: null, contextTrigger: null, activeFolderId: null, editingFolderId: null, layoutEditing:false, layoutSelected:null };
   var toastTimer;
+  var pendingIconImage = '';
+  var iconImagePattern = /^data:image\/(?:png|jpeg|webp);base64,[a-z0-9+/=]+$/i;
   var brokenRaw = null;
   var lastSavedData = null;
   var editingGroupId = null;
@@ -61,6 +63,30 @@
       if (!['http:', 'https:'].includes(url.protocol) || !url.hostname || url.username || url.password) return null;
       return url.href;
     } catch (_) { return null; }
+  }
+  function validSearchTemplate(text) {
+    if(typeof text!=='string' || text.length>512 || !text.includes('%s') || text.split('%s').length!==2)return false;
+    try {
+      var url=new URL(text.replace('%s','example'));
+      return url.protocol==='https:' && !!url.hostname && !url.username && !url.password;
+    } catch(_){return false;}
+  }
+  function iconImageValid(value){
+    return typeof value==='string' && value.length<=150000 && iconImagePattern.test(value);
+  }
+  function searchDestination(text) {
+    var q=text.trim();
+    if(!q)return null;
+    // Only recognize a complete HTTP(S) URL or unambiguous single-token domain as navigation.
+    var looksUrl=/^https?:\/\//i.test(q) || /^(?:[a-z0-9-]+\.)+[a-z]{2,}(?::\d{2,5})?(?:[/?#][^\s]*)?$/i.test(q);
+    if(looksUrl){
+      var direct=safeUrl(q);
+      if(direct)return direct;
+    }
+    var settings=state.data.settings;
+    var template=settings.engine==='custom' && validSearchTemplate(settings.customEngineUrl)
+      ? settings.customEngineUrl : (searchEngines[settings.engine] || searchEngines.baidu)+'%s';
+    return template.replace('%s',encodeURIComponent(q));
   }
   function validate(raw) {
     if (!raw || typeof raw !== 'object' || !Array.isArray(raw.groups) || !Array.isArray(raw.links)) throw Error('无效的导航备份文件');
@@ -99,6 +125,8 @@
         groupId: groupId,
         folderId: folder && folder.groupId === groupId ? folder.id : null,
         icon: str(link.icon, 4) || '✦',
+        iconMode: ['auto','letter','custom'].includes(link.iconMode) ? link.iconMode : 'auto',
+        iconImage: iconImageValid(link.iconImage) ? link.iconImage : '',
         color: /^#[a-f0-9]{6}$/i.test(link.color) ? link.color : colorPalette[0],
         favorite: link.favorite === true
       };
@@ -135,7 +163,11 @@
       settings: {
         theme: settings.theme === 'light' ? 'light' : 'dark',
         wallpaper: wp === 'custom' && !custom ? 'aurora' : wp, customWallpaper: custom,
-        engine: Object.prototype.hasOwnProperty.call(searchEngines, settings.engine) ? settings.engine : 'baidu',
+        engine: settings.engine==='custom' && validSearchTemplate(settings.customEngineUrl) ? 'custom' :
+          Object.prototype.hasOwnProperty.call(searchEngines, settings.engine) ? settings.engine : 'baidu',
+        customEngineUrl: validSearchTemplate(settings.customEngineUrl) ? settings.customEngineUrl : '',
+        wallpaperDim: Number.isInteger(settings.wallpaperDim) && settings.wallpaperDim>=0 && settings.wallpaperDim<=55 ? settings.wallpaperDim : 20,
+        wallpaperBlur: Number.isInteger(settings.wallpaperBlur) && settings.wallpaperBlur>=0 && settings.wallpaperBlur<=8 ? settings.wallpaperBlur : 0,
         showWidgets: settings.showWidgets !== false, compact: settings.compact === true
       }
     };
@@ -206,6 +238,15 @@
   function applySettings() {
     var s = state.data.settings, app = $('app');
     app.dataset.theme = s.theme; app.dataset.wallpaper = s.wallpaper;
+    document.documentElement.dataset.theme=s.theme;
+    app.style.setProperty('--wp-brightness',String((100-s.wallpaperDim)/100));
+    app.style.setProperty('--wp-blur',s.wallpaperBlur+'px');
+    $('wallpaperDim').value=String(s.wallpaperDim);
+    $('wallpaperBlur').value=String(s.wallpaperBlur);
+    $('wallpaperDimValue').textContent=(100-s.wallpaperDim)+'%';
+    $('wallpaperBlurValue').textContent=s.wallpaperBlur+'px';
+    $('wallpaperRestore').disabled=!s.customWallpaper;
+    $('customEngineUrl').value=s.customEngineUrl;
     app.classList.toggle('compact', s.compact); app.classList.toggle('focus', state.focus);
     app.classList.toggle('sorting',state.sortMode);
     app.classList.toggle('manual-layout',desktopManual());
@@ -299,7 +340,11 @@
     // 默认尝试获取真实站点图标，失败则使用用户设置的字符图标。
     var fallback = node('span','favicon-letter',item.icon);
     logo.append(fallback);
-    try {
+    if(item.iconMode==='custom' && iconImageValid(item.iconImage)) {
+      var personal=node('img','favicon-img custom-favicon');
+      personal.alt='';personal.decoding='async';personal.src=item.iconImage;
+      logo.append(personal);logo.classList.add('has-favicon');
+    } else if(item.iconMode!=='letter') try {
       var hostname = new URL(item.url).hostname;
       var favicon = node('img','favicon-img');
       favicon.alt = ''; favicon.decoding = 'async'; favicon.referrerPolicy = 'no-referrer';
@@ -827,6 +872,9 @@
     state.editingId = item ? item.id : null; groupSelect();
     $('dialogTitle').textContent = item ? '编辑网站' : '添加网站';
     $('linkName').value = item ? item.name : ''; $('linkUrl').value = item ? item.url : '';
+    pendingIconImage=item && item.iconImage ? item.iconImage : '';
+    $('linkIconMode').value=item && item.iconMode ? item.iconMode : 'auto';
+    updateIconPreview();
     $('linkIcon').value = item ? item.icon : '✦'; $('linkColor').value = item ? item.color : '#708cfc';
     $('linkFav').checked = item ? item.favorite : state.activeGroup === 'favorites';
     var folder = !item && preferredFolderId ? state.data.folders.find(function(f){return f.id===preferredFolderId;}) : null;
@@ -840,7 +888,12 @@
     var name = $('linkName').value.trim(), url = safeUrl($('linkUrl').value);
     if (!name || name.length > 40) { $('editError').textContent = '网站名称应为 1–40 个字符'; return; }
     if (!url) { $('editError').textContent = '请填写有效的 HTTP/HTTPS 地址'; return; }
-    var data = { id: state.editingId || id(), name: name, url: url, icon: $('linkIcon').value.trim().slice(0,4) || '✦', color: $('linkColor').value, groupId: $('linkGroup').value, folderId: $('linkFolder').value || null, favorite: $('linkFav').checked };
+    var data = { id: state.editingId || id(), name: name, url: url, icon: $('linkIcon').value.trim().slice(0,4) || '✦',
+      iconMode: $('linkIconMode').value, iconImage: pendingIconImage,
+      color: $('linkColor').value, groupId: $('linkGroup').value, folderId: $('linkFolder').value || null, favorite: $('linkFav').checked };
+    if(data.iconMode==='custom' && !iconImageValid(data.iconImage)){
+      $('editError').textContent='请先上传有效的自定义图标，或改用自动图标';return;
+    }
     if (state.editingId) { var index = state.data.links.findIndex(function (l) { return l.id === state.editingId; }); if (index >= 0) state.data.links[index] = data; }
     else { if (state.data.links.length >= 500) { $('editError').textContent = '最多只能保存 500 个网站'; return; } state.data.links.push(data); }
     if (!save()) return;
@@ -918,6 +971,45 @@
       state.data = incoming; state.activeGroup='all'; state.layoutEditing=false;state.layoutSelected=null;$('layoutToolbar').hidden=true; if (!save()) return; render(); $('notes').value=state.data.notes; $('noteCount').textContent=state.data.notes.length+' / 10000'; $('settingsDialog').close(); toast('导入成功');
     } catch (err) { toast(err && err.message ? err.message : '文件无法导入'); }
   }
+  function updateIconPreview() {
+    var preview=$('linkIconPreview');
+    preview.replaceChildren();
+    if($('linkIconMode').value==='custom' && iconImageValid(pendingIconImage)) {
+      var img=document.createElement('img');img.alt='';img.src=pendingIconImage;preview.append(img);
+    } else preview.textContent=$('linkIcon').value.trim().slice(0,4) || '✦';
+  }
+  function uploadIcon(e) {
+    var file=e.target.files && e.target.files[0];e.target.value='';if(!file)return;
+    if(!['image/png','image/jpeg','image/webp'].includes(file.type) || file.size>80000){
+      $('editError').textContent='图标只能使用 80KB 内的 PNG/JPG/WebP 图片';return;
+    }
+    var reader=new FileReader();
+    reader.onload=function(){
+      var result=String(reader.result||'');
+      if(!iconImageValid(result)){$('editError').textContent='上传的图标无效';return;}
+      pendingIconImage=result;
+      $('linkIconMode').value='custom';
+      $('editError').textContent='';
+      updateIconPreview();
+    };
+    reader.onerror=function(){$('editError').textContent='读取图标失败';};
+    reader.readAsDataURL(file);
+  }
+  function applySearchTemplate() {
+    var input=$('customEngineUrl').value.trim();
+    if(!validSearchTemplate(input)){
+      $('engineHint').textContent='请输入 HTTPS 网址，且恰好包含一个 %s 占位符';
+      return false;
+    }
+    state.data.settings.customEngineUrl=input;
+    state.data.settings.engine='custom';
+    if(!save())return false;
+    $('engine').value='custom';$('engineHint').textContent='已保存。搜索词将被安全编码后填入 %s。';
+    return true;
+  }
+  function wallpaperRefresh() {
+    if(save())applySettings();
+  }
   function setWallpaperFromFile(e) {
     var file=e.target.files && e.target.files[0]; e.target.value=''; if(!file) return;
     if(!['image/png','image/jpeg','image/webp'].includes(file.type)||file.size>2000000){ toast('请上传 2MB 内的 PNG/JPG/WebP 图片'); return; }
@@ -951,6 +1043,24 @@
     });
     $('editClose').addEventListener('click',function(){ $('editDialog').close(); }); $('cancelEdit').addEventListener('click',function(){ $('editDialog').close(); });
     $('editForm').addEventListener('submit',saveEdit);
+    $('linkIconMode').addEventListener('change',updateIconPreview);
+    $('linkIcon').addEventListener('input',updateIconPreview);
+    $('linkIconUpload').addEventListener('change',uploadIcon);
+    $('linkIconClear').addEventListener('click',function(){
+      pendingIconImage='';$('linkIconMode').value='auto';updateIconPreview();
+    });
+    $('customEngineSave').addEventListener('click',applySearchTemplate);
+    $('wallpaperDim').addEventListener('input',function(){
+      state.data.settings.wallpaperDim=Number(this.value);wallpaperRefresh();
+    });
+    $('wallpaperBlur').addEventListener('input',function(){
+      state.data.settings.wallpaperBlur=Number(this.value);wallpaperRefresh();
+    });
+    $('wallpaperRestore').addEventListener('click',function(){
+      state.data.settings.customWallpaper='';
+      if(state.data.settings.wallpaper==='custom')state.data.settings.wallpaper='aurora';
+      wallpaperRefresh();
+    });
     $('linkGroup').addEventListener('change',function(){refreshFolderChoices(null);});
     $('manageAddFolder').addEventListener('click',function(){
       $('settingsDialog').close();changeFolder();
@@ -993,8 +1103,21 @@
       if(state.sortMode)toast('排序已开启：可用鼠标或触屏拖动，键盘使用 Alt + 方向键');
       $('linksSection').scrollIntoView({behavior:'smooth',block:'start'});
     });
-    $('searchForm').addEventListener('submit',function(e){ e.preventDefault();var q=$('searchInput').value.trim();if(!q){$('searchInput').focus();return;} window.open(searchEngines[state.data.settings.engine]+encodeURIComponent(q),'_blank','noopener,noreferrer'); });
-    $('engine').addEventListener('change',function(){ state.data.settings.engine=this.value; if(!save())applySettings();});
+    $('searchForm').addEventListener('submit',function(e){
+      e.preventDefault();
+      var destination=searchDestination($('searchInput').value);
+      if(!destination){$('searchInput').focus();return;}
+      window.open(destination,'_blank','noopener,noreferrer');
+    });
+    $('engine').addEventListener('change',function(){
+      if(this.value==='custom' && !validSearchTemplate(state.data.settings.customEngineUrl)){
+        $('settingsDialog').showModal();
+        $('customEngineUrl').focus();$('engineHint').textContent='先保存一个带 %s 的 HTTPS 搜索网址';
+        this.value=state.data.settings.engine;return;
+      }
+      state.data.settings.engine=this.value;
+      if(!save())applySettings();
+    });
     $('notes').addEventListener('input',function(){state.data.notes=this.value; $('noteCount').textContent=this.value.length+' / 10000'; save();});
     $('prevMonth').addEventListener('click',function(){ state.monthOffset--;drawCalendar(); });
     $('nextMonth').addEventListener('click',function(){ state.monthOffset++;drawCalendar(); });

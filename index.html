@@ -11,6 +11,7 @@
   <link rel="stylesheet" href="./desktop.css">
   <link rel="stylesheet" href="./minimal.css">
   <link rel="stylesheet" href="./layout.css">
+  <link rel="stylesheet" href="./personalize.css">
   <script src="./app.js" defer></script>
 </head>
 <body>
@@ -37,7 +38,7 @@
           <div class="hero-eyebrow">✦ &nbsp; YOUR PERSONAL START PAGE</div>
           <div id="clock" class="clock" aria-live="off">00<span>:</span>00</div>
           <div id="date" class="hero-date"></div><p id="greeting" class="greeting">开启新的一天</p>
-          <form id="searchForm" class="search-form" role="search"><label class="engine-wrap"><select id="engine" aria-label="搜索引擎"><option value="baidu">百度</option><option value="bing">必应</option><option value="google">Google</option></select></label><div class="search-divider"></div><input id="searchInput" aria-label="搜索网络" type="search" placeholder="搜索你感兴趣的内容…" autocomplete="off"><kbd>Ctrl K</kbd><button type="submit" class="search-go" aria-label="开始搜索">⌕</button></form>
+          <form id="searchForm" class="search-form" role="search"><label class="engine-wrap"><select id="engine" aria-label="搜索引擎"><option value="baidu">百度</option><option value="bing">必应</option><option value="google">Google</option><option value="custom">自定义</option></select></label><div class="search-divider"></div><input id="searchInput" aria-label="搜索网络" type="search" placeholder="搜索你感兴趣的内容…" autocomplete="off"><kbd>Ctrl K</kbd><button type="submit" class="search-go" aria-label="开始搜索">⌕</button></form>
           <div class="hero-hint">✧ &nbsp; 从一个好问题开始，探索更大的世界</div>
         </section>
         <section id="widgets" class="widgets">
@@ -101,8 +102,32 @@
 </dialog>
 <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
   <dialog id="editDialog" class="dialog"><form id="editForm" class="dialog-inner" method="dialog"><div class="dialog-head"><div><small>QUICK ACCESS</small><h2 id="dialogTitle">添加网站</h2></div><button id="editClose" type="button" class="close">×</button></div><label>网站名称<input id="linkName" required maxlength="40" placeholder="例如：我的博客"></label><label>网站地址<input id="linkUrl" required maxlength="2048" placeholder="https://example.com"></label><div class="two-cols"><label>所属分类<select id="linkGroup"></select></label><label>图标字符<input id="linkIcon" maxlength="4" placeholder="✦"></label></div><label>所在文件夹<select id="linkFolder"><option value="">桌面（不放入文件夹）</option></select></label>
-<label>图标颜色<input id="linkColor" type="color" value="#708cfc"></label><label class="checkbox-line"><input id="linkFav" type="checkbox"> 加入我的常用</label><div id="editError" class="form-error" role="alert"></div><div class="dialog-actions"><button id="deleteLink" type="button" class="danger" hidden>删除</button><button id="cancelEdit" type="button" class="ghost">取消</button><button type="submit" class="primary-btn">保存网站</button></div></form></dialog>
-  <dialog id="settingsDialog" class="dialog settings-dialog"><div class="settings-inner"><div class="dialog-head"><div><small>PERSONALIZE YOUR SPACE</small><h2>个性化设置</h2></div><button id="settingsClose" class="close" aria-label="关闭设置">×</button></div><div class="settings-scroll"><section class="setting-section"><h3>☼ 主题外观</h3><p>切换喜欢的桌面主题</p><div id="themeButtons" class="choice-row"><button data-theme="dark">深色</button><button data-theme="light">浅色</button></div></section><section class="setting-section"><h3>✧ 桌面壁纸</h3><p>选择一套内置壁纸，或上传自己的图片</p><div id="wallpaperButtons" class="wallpaper-options"><button data-wallpaper="aurora">极光蓝</button><button data-wallpaper="dusk">落日橙</button><button data-wallpaper="ocean">海洋蓝</button><button data-wallpaper="forest">森系绿</button><button data-wallpaper="night">午夜紫</button></div><label class="upload-btn">↑ 上传壁纸（≤2 MB）<input id="wallpaperUpload" type="file" accept="image/png,image/jpeg,image/webp" hidden></label></section><section class="setting-section"><h3>▦ 桌面显示</h3>
+<label>图标颜色<input id="linkColor" type="color" value="#708cfc"></label>
+<div class="icon-editor">
+  <label>图标来源<select id="linkIconMode"><option value="auto">自动获取网站图标</option><option value="letter">使用字符图标</option><option value="custom">自定义图片</option></select></label>
+  <div class="icon-upload-row">
+    <span id="linkIconPreview" class="icon-editor-preview" aria-label="图标预览">✦</span>
+    <label class="upload-btn">上传图标（≤80 KB）<input id="linkIconUpload" type="file" accept="image/png,image/jpeg,image/webp" hidden></label>
+    <button id="linkIconClear" type="button" class="ghost">恢复自动图标</button>
+  </div>
+  <p class="field-hint">支持 PNG、JPG、WebP；图标只保存在当前浏览器与 JSON 备份中。</p>
+</div><label class="checkbox-line"><input id="linkFav" type="checkbox"> 加入我的常用</label><div id="editError" class="form-error" role="alert"></div><div class="dialog-actions"><button id="deleteLink" type="button" class="danger" hidden>删除</button><button id="cancelEdit" type="button" class="ghost">取消</button><button type="submit" class="primary-btn">保存网站</button></div></form></dialog>
+  <dialog id="settingsDialog" class="dialog settings-dialog"><div class="settings-inner"><div class="dialog-head"><div><small>PERSONALIZE YOUR SPACE</small><h2>个性化设置</h2></div><button id="settingsClose" class="close" aria-label="关闭设置">×</button></div><div class="settings-scroll"><section class="setting-section"><h3>☼ 主题外观</h3><p>切换喜欢的桌面主题</p><div id="themeButtons" class="choice-row"><button data-theme="dark" type="button">深色</button><button data-theme="light" type="button">浅色</button></div></section><section class="setting-section"><h3>✧ 桌面壁纸</h3><p>选择一套内置壁纸，或上传自己的图片</p><div id="wallpaperButtons" class="wallpaper-options wallpaper-gallery"><button data-wallpaper="aurora" type="button"><span class="wallpaper-thumb"></span><span>山水蓝</span></button><button data-wallpaper="dusk" type="button"><span class="wallpaper-thumb"></span><span>暖霞</span></button><button data-wallpaper="ocean" type="button"><span class="wallpaper-thumb"></span><span>湖海</span></button><button data-wallpaper="forest" type="button"><span class="wallpaper-thumb"></span><span>森林</span></button><button data-wallpaper="night" type="button"><span class="wallpaper-thumb"></span><span>星夜</span></button></div>
+<div class="wallpaper-upload-actions">
+  <label class="upload-btn">↑ 上传壁纸（≤2 MB）<input id="wallpaperUpload" type="file" accept="image/png,image/jpeg,image/webp" hidden></label>
+  <button id="wallpaperRestore" type="button" class="ghost">移除自定义壁纸</button>
+</div>
+<div class="wallpaper-tuning"><label for="wallpaperDim">壁纸亮度 <output id="wallpaperDimValue" for="wallpaperDim">80%</output></label><input id="wallpaperDim" type="range" min="0" max="55" step="5" value="20">
+<label for="wallpaperBlur">壁纸模糊 <output id="wallpaperBlurValue" for="wallpaperBlur">0px</output></label><input id="wallpaperBlur" type="range" min="0" max="8" step="1" value="0"></div></section><section class="setting-section">
+  <h3>⌕ 搜索与地址栏</h3>
+  <p>支持直接输入网站地址、切换搜索引擎，或自定义 HTTPS 搜索网址。</p>
+  <label class="custom-engine-setting">自定义搜索网址（包含 %s）
+    <input id="customEngineUrl" type="text" maxlength="512" placeholder="https://www.example.com/search?q=%s" spellcheck="false" autocomplete="off">
+  </label>
+  <button id="customEngineSave" class="ghost" type="button">保存自定义搜索引擎</button>
+  <p id="engineHint" class="field-hint">例如：https://www.ecosia.org/search?q=%s</p>
+</section>
+<section class="setting-section"><h3>▦ 桌面显示</h3>
   <label class="checkbox-line"><input id="showWidgets" type="checkbox" checked> 显示桌面小组件</label>
   <label class="checkbox-line"><input id="compact" type="checkbox"> 紧凑排列图标</label>
   <div class="setting-actions-row">

@@ -21,6 +21,8 @@ jobs:
           test -s desktop.css
           test -s minimal.css
           test -s layout.css
+          test -s personalize.css
+          test -s tests/personalize-smoke.html
           test -s tests/ui-smoke.html
           test -s tests/stability-smoke.html
           test -s tests/sorting-smoke.html
@@ -35,12 +37,13 @@ jobs:
           grep -q 'desktop.css' index.html
           grep -q 'minimal.css' index.html
           grep -q 'layout.css' index.html
+          grep -q 'personalize.css' index.html
           grep -q 'favicon.svg' index.html
       - name: Desktop stylesheet guard
         run: |
           node - <<'NODE'
           const fs = require('node:fs');
-          const css = fs.readFileSync('desktop.css', 'utf8') + '\n' + fs.readFileSync('minimal.css', 'utf8') + '\n' + fs.readFileSync('layout.css', 'utf8');
+          const css = fs.readFileSync('desktop.css', 'utf8') + '\n' + fs.readFileSync('minimal.css', 'utf8') + '\n' + fs.readFileSync('layout.css', 'utf8') + '\n' + fs.readFileSync('personalize.css', 'utf8');
           const expected = ['.sidebar', '.tiles', '.tile-icon', '.search-form', '.widgets', '.link-context-menu', '@media(max-width:620px)'];
           for (const selector of expected) {
             if (!css.includes(selector)) throw new Error('Missing visual selector: ' + selector);
@@ -118,6 +121,14 @@ jobs:
             exit 1
           fi
           grep -oE 'PASS [0-9]+ checks' /tmp/nav-layout-result.html | head -1
+          "$BROWSER" --headless --no-sandbox --disable-gpu --disable-dev-shm-usage --virtual-time-budget=13000 --dump-dom http://127.0.0.1:8766/tests/personalize-smoke.html > /tmp/nav-personalize-result.html 2>/tmp/nav-personalize-chrome.log
+          if ! grep -q 'data-test-status="PASS"' /tmp/nav-personalize-result.html; then
+            echo "::error::Wallpaper, theme, icon or search browser regression failed"
+            grep -oE 'FAIL [^<]+' /tmp/nav-personalize-result.html || true
+            tail -25 /tmp/nav-personalize-chrome.log || true
+            exit 1
+          fi
+          grep -oE 'PASS [0-9]+ checks' /tmp/nav-personalize-result.html | head -1
       - name: Upload visual screenshots
         if: always()
         uses: actions/upload-artifact@v4

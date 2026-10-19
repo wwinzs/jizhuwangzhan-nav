@@ -1,0 +1,107 @@
+/* v1.7 壁纸与主题统一：不改变 v1.6 既有布局/交互 */
+.app .backdrop{
+  filter:brightness(var(--wp-brightness,.8)) blur(var(--wp-blur,0px));
+  transition:filter .16s ease;
+}
+.wallpaper-gallery{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}
+.wallpaper-gallery button{
+  display:flex;flex-direction:column;gap:6px;min-width:0;
+  text-align:left;padding:5px;border-radius:12px
+}
+.wallpaper-gallery .wallpaper-thumb{
+  display:block;height:65px;width:100%;border-radius:8px;
+  background-position:center;background-size:cover;
+  box-shadow:inset 0 0 0 1px #ffffff28
+}
+.wallpaper-gallery [data-wallpaper=aurora] .wallpaper-thumb{background-image:linear-gradient(#20354a19,#10233b33),url("https://images.unsplash.com/photo-1470770841072-f978cf4d019e?auto=format&fit=crop&w=340&q=60");background-color:#547a95}
+.wallpaper-gallery [data-wallpaper=dusk] .wallpaper-thumb{background-image:linear-gradient(#1b234a10,#222f4722),url("https://images.unsplash.com/photo-1500534623283-312aade485b7?auto=format&fit=crop&w=340&q=60");background-color:#ab7d8f}
+.wallpaper-gallery [data-wallpaper=ocean] .wallpaper-thumb{background-image:linear-gradient(#164b6222,#12335d22),url("https://images.unsplash.com/photo-1501785888041-af3ef285b470?auto=format&fit=crop&w=340&q=60");background-color:#4c91ad}
+.wallpaper-gallery [data-wallpaper=forest] .wallpaper-thumb{background-image:linear-gradient(#183d3822,#112d3522),url("https://images.unsplash.com/photo-1448375240586-882707db888b?auto=format&fit=crop&w=340&q=60");background-color:#376c59}
+.wallpaper-gallery [data-wallpaper=night] .wallpaper-thumb{background-image:linear-gradient(#0d1a4022,#15133833),url("https://images.unsplash.com/photo-1519681393784-d120267933ba?auto=format&fit=crop&w=340&q=60");background-color:#263a72}
+.wallpaper-gallery button.selected{outline:2px solid #b1c5ff;outline-offset:1px}
+.wallpaper-gallery button span:last-child{font-size:11px}
+.wallpaper-upload-actions{display:flex;align-items:center;flex-wrap:wrap;gap:10px;margin:10px 0}
+.wallpaper-upload-actions #wallpaperRestore{font-size:11px;padding:9px 10px}
+#wallpaperRestore:disabled{opacity:.4;cursor:not-allowed}
+.wallpaper-tuning{display:grid;gap:9px;margin-top:16px}
+.wallpaper-tuning label{display:flex;justify-content:space-between;align-items:center;font-size:12px;color:#e3eafa}
+.wallpaper-tuning output{font-variant-numeric:tabular-nums;color:#c7d7fb}
+.wallpaper-tuning input{width:100%;accent-color:#8fa9fc}
+.icon-editor{display:grid;gap:11px}
+.icon-editor>label{display:grid;gap:7px;font-size:12px;color:#d2def4}
+.icon-editor>label select{width:100%;background:#ffffff13;color:#fff;border:1px solid #ffffff2e;border-radius:10px;padding:11px}
+.icon-editor option{color:#263550}
+.icon-upload-row{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.icon-editor-preview{
+  flex:none;display:grid;place-items:center;width:55px;height:55px;
+  background:#647eaa66;border-radius:15px;color:white;font-size:23px;
+  border:1px solid #ffffff33;overflow:hidden
+}
+.icon-editor-preview img{width:45px;height:45px;object-fit:contain}
+.field-hint{font-size:11px;color:#b7c9e8;line-height:1.6;margin:4px 0}
+.icon-editor .upload-btn,.icon-editor .ghost{font-size:11px}
+.custom-engine-setting{display:grid;gap:8px;font-size:12px;color:#e1eafb}
+.custom-engine-setting input{
+  width:100%;background:#ffffff13;border:1px solid #ffffff33;
+  border-radius:10px;color:#fff;padding:12px;font-size:12px
+}
+#customEngineSave{margin-top:10px}
+.app[data-theme=light]{
+  --text:#253a53;--muted:#52647c;--glass:rgba(255,255,255,.84);
+  --glass-border:rgba(255,255,255,.7);--panel:rgba(255,255,255,.85);
+  --input-bg:rgba(236,243,255,.9);
+}
+.app[data-theme=light] .widgets .widget{
+  background:rgba(251,253,255,.87)!important;color:#253a53;
+  border-color:rgba(255,255,255,.85);
+}
+.app[data-theme=light] .widget-label,
+.app[data-theme=light] .quote-widget h2,
+.app[data-theme=light] .quote-widget p,
+.app[data-theme=light] .quote-foot,
+.app[data-theme=light] .calendar span.day,
+.app[data-theme=light] .note-widget textarea,
+.app[data-theme=light] .note-footer{color:#243752!important}
+.app[data-theme=light] .calendar span.today{color:#fff!important;background:#526ed0}
+.app[data-theme=light] .note-widget textarea::placeholder{color:#738399}
+.app[data-theme=light] .quote-widget{background:rgba(245,247,255,.92)!important}
+.app[data-theme=light] .quote-foot{border-color:#cad6e6}
+.app[data-theme=light] .widget .month-nav button,.app[data-theme=light] .widget .month-heading button{background:#e8eefb;color:#253a53}
+html[data-theme=light] .dialog{background:#f6f9ff;color:#233552;border-color:#fff}
+html[data-theme=light] .dialog .dialog-head small{color:#5873a4}
+html[data-theme=light] .dialog .close{color:#2c4165}
+html[data-theme=light] .dialog .setting-section{border-color:#d6dfed}
+html[data-theme=light] .dialog .setting-section h3,
+html[data-theme=light] .dialog .setting-section p,
+html[data-theme=light] .dialog .dialog-inner>label,
+html[data-theme=light] .dialog .two-cols>label,
+html[data-theme=light] .dialog .widget-manager-name,
+html[data-theme=light] .dialog .wallpaper-tuning label,
+html[data-theme=light] .dialog .wallpaper-tuning output,
+html[data-theme=light] .dialog .custom-engine-setting,
+html[data-theme=light] .dialog .icon-editor>label,
+html[data-theme=light] .dialog .widget-position-label{color:#304461}
+html[data-theme=light] .dialog label input:not([type=checkbox]),
+html[data-theme=light] .dialog label select,
+html[data-theme=light] .dialog .custom-engine-setting input,
+html[data-theme=light] .dialog .icon-editor>label select,
+html[data-theme=light] .dialog .widget-position-label select,
+html[data-theme=light] .dialog .widget-manager-row select{
+  background:#fff;border-color:#c9d6e9;color:#263b58
+}
+html[data-theme=light] .dialog .ghost,
+html[data-theme=light] .dialog .choice-row button,
+html[data-theme=light] .dialog .wallpaper-options button,
+html[data-theme=light] .dialog .widget-manager-row button{color:#274263;background:#e4ecfa;border-color:#b6c8e2}
+html[data-theme=light] .dialog .choice-row button.selected,
+html[data-theme=light] .dialog .wallpaper-options button.selected{background:#c3d4f7;border-color:#6e8ad0}
+html[data-theme=light] .dialog .field-hint{color:#576c8b}
+html[data-theme=light] .dialog .manage-row{border-color:#d4dfea;color:#273b5a}
+html[data-theme=light] .dialog .icon-editor-preview{background:#e8eefb;color:#243a54;border-color:#bcd0ed}
+html[data-theme=light] .dialog .form-error{color:#a73737}
+html[data-theme=light] .dialog .folder-subtitle{color:#59708f}
+@media(max-width:620px){
+  .wallpaper-gallery{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .wallpaper-gallery .wallpaper-thumb{height:56px}
+}
+@media(prefers-reduced-motion:reduce){.app .backdrop{transition:none}}

@@ -1,0 +1,109 @@
+<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><title>v1.7 个性化功能检查</title></head>
+<body data-test-status="pending"><pre id="result">Running</pre><iframe id="site" style="width:1120px;height:870px"></iframe>
+<script>
+(async function(){
+  var key='jizhuwangzhan-nav:v1', original=localStorage.getItem(key),frame=document.getElementById('site'),n=0,opened='';
+  function ok(cond,msg){n++;if(!cond)throw Error('FAIL '+msg);}
+  function el(id){return frame.contentDocument.getElementById(id);}
+  function data(){return JSON.parse(localStorage.getItem(key));}
+  function wait(ms){return new Promise(function(resolve){setTimeout(resolve,ms);});}
+  function load(){return new Promise(function(resolve,reject){frame.onload=resolve;frame.onerror=reject;frame.src='../index.html?personalize='+Date.now()+'-'+n;});}
+  function formSubmit(id){el(id).dispatchEvent(new Event('submit',{bubbles:true,cancelable:true}));}
+  function fileFor(name,base64){
+    var text=atob(base64),bytes=new Uint8Array(text.length);
+    for(var i=0;i<text.length;i++)bytes[i]=text.charCodeAt(i);
+    return new frame.contentWindow.File([bytes],name,{type:'image/png'});
+  }
+  async function upload(id,file){
+    var dt=new frame.contentWindow.DataTransfer();dt.items.add(file);
+    var input=el(id);input.files=dt.files;input.dispatchEvent(new Event('change',{bubbles:true}));
+    await wait(220);
+  }
+  var onePixel='iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/gmQAAAAASUVORK5CYII=';
+  try{
+    localStorage.removeItem(key);await load();
+    var app=el('app');
+    ok(!!el('wallpaperDim')&&!!el('wallpaperBlur')&&!!el('customEngineUrl'),'personalization controls render');
+    ok(!!el('linkIconMode')&&!!el('linkIconUpload'),'image icon controls render');
+    ok(data()===null,'defaults not written automatically');
+    el('settingsButton').click();
+    el('wallpaperDim').value='40';
+    el('wallpaperDim').dispatchEvent(new Event('input',{bubbles:true}));
+    ok(data().settings.wallpaperDim===40,'wallpaper brightness persisted');
+    ok(app.style.getPropertyValue('--wp-brightness')==='0.6','brightness CSS variable applied');
+    el('wallpaperBlur').value='3';
+    el('wallpaperBlur').dispatchEvent(new Event('input',{bubbles:true}));
+    ok(data().settings.wallpaperBlur===3,'blur saved');
+    ok(app.style.getPropertyValue('--wp-blur')==='3px','blur CSS applied');
+    var light=frame.contentDocument.querySelector('#themeButtons button[data-theme="light"]');
+    light.click();
+    ok(data().settings.theme==='light','light theme persisted');
+    ok(frame.contentDocument.documentElement.dataset.theme==='light','dialogs receive light theme');
+    ok(frame.contentWindow.getComputedStyle(el('settingsDialog')).backgroundColor==='rgb(246, 249, 255)','light dialog gets light background');
+    frame.contentDocument.querySelector('#themeButtons button[data-theme="dark"]').click();
+    ok(data().settings.theme==='dark','dark theme restored');
+    el('customEngineUrl').value='http://example.org/?q=%s';
+    el('customEngineSave').click();
+    ok(data().settings.engine!=='custom','HTTP custom search rejected');
+    el('customEngineUrl').value='https://example.org/search?q=%s';
+    el('customEngineSave').click();
+    ok(data().settings.engine==='custom','custom engine saved');
+    ok(data().settings.customEngineUrl==='https://example.org/search?q=%s','custom template persisted');
+    el('settingsClose').click();
+    frame.contentWindow.open=function(url){opened=url;return null;};
+    el('searchInput').value='hello world';
+    formSubmit('searchForm');
+    ok(opened==='https://example.org/search?q=hello%20world','custom search encodes query');
+    el('searchInput').value='github.com';
+    formSubmit('searchForm');
+    ok(opened==='https://github.com/','bare domain navigates directly');
+    el('searchInput').value='https://example.com/page?q=1';
+    formSubmit('searchForm');
+    ok(opened==='https://example.com/page?q=1','absolute safe URL navigates directly');
+    el('searchInput').value='javascript:alert(1)';
+    formSubmit('searchForm');
+    ok(opened.startsWith('https://example.org/search?'),'unsafe protocol cannot launch as URL');
+    var site=frame.contentDocument.querySelector('.tile-link');
+    site.dispatchEvent(new MouseEvent('contextmenu',{bubbles:true,cancelable:true,clientX:85,clientY:85}));
+    el('contextEdit').click();
+    ok(el('editDialog').open,'site edit opens');
+    el('linkIconMode').value='letter';
+    formSubmit('editForm');
+    ok(data().links[0].iconMode==='letter','letter mode saved');
+    site=frame.contentDocument.querySelector('.tile-link');
+    site.dispatchEvent(new MouseEvent('contextmenu',{bubbles:true,cancelable:true,clientX:85,clientY:85}));
+    el('contextEdit').click();
+    await upload('linkIconUpload',fileFor('icon.png',onePixel));
+    ok(el('linkIconMode').value==='custom','upload activates custom icon mode');
+    ok(!!el('linkIconPreview').querySelector('img'),'uploaded icon preview shows');
+    formSubmit('editForm');
+    ok(data().links[0].iconMode==='custom'&&data().links[0].iconImage.startsWith('data:image/png;base64,'),'custom icon persists');
+    ok(!!frame.contentDocument.querySelector('.tile .custom-favicon'),'custom tile image renders');
+    site=frame.contentDocument.querySelector('.tile-link');
+    site.dispatchEvent(new MouseEvent('contextmenu',{bubbles:true,cancelable:true,clientX:85,clientY:85}));
+    el('contextEdit').click();
+    el('linkIconClear').click();
+    formSubmit('editForm');
+    ok(data().links[0].iconMode==='auto'&&!data().links[0].iconImage,'automatic icon mode restores');
+    el('settingsButton').click();
+    await upload('wallpaperUpload',fileFor('wallpaper.png',onePixel));
+    ok(data().settings.wallpaper==='custom','wallpaper upload selects custom mode');
+    ok(data().settings.customWallpaper.startsWith('data:image/png;base64,'),'custom wallpaper persisted');
+    el('wallpaperRestore').click();
+    ok(data().settings.wallpaper==='aurora'&&data().settings.customWallpaper==='','custom wallpaper can be removed');
+    el('settingsClose').click();
+    var legacy=data();
+    delete legacy.settings.wallpaperDim;delete legacy.settings.wallpaperBlur;delete legacy.settings.customEngineUrl;
+    legacy.settings.engine='baidu';
+    legacy.links.forEach(function(l){delete l.iconMode;delete l.iconImage;});
+    localStorage.setItem(key,JSON.stringify(legacy));await load();
+    ok(el('storageRecovery').hidden,'v1.6 data loads without recovery banner');
+    ok(el('app').style.getPropertyValue('--wp-brightness')==='0.8','legacy brightness uses default');
+    ok(el('wallpaperBlur').value==='0','legacy blur uses default');
+    ok(frame.contentDocument.querySelectorAll('.tile-link').length>0,'legacy icons still render');
+    document.body.dataset.testStatus='PASS';elResult('PASS '+n+' checks');
+  }catch(err){document.body.dataset.testStatus='FAIL';elResult('FAIL '+n+' checks: '+(err.stack||err));}
+  finally{if(original===null)localStorage.removeItem(key);else localStorage.setItem(key,original);}
+  function elResult(v){document.getElementById('result').textContent=v;}
+})();
+</script></body></html>
