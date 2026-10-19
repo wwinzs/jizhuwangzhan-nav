@@ -20,6 +20,7 @@ jobs:
           test -s style.css
           test -s desktop.css
           test -s minimal.css
+          test -s layout.css
           test -s tests/ui-smoke.html
           test -s tests/stability-smoke.html
           test -s tests/sorting-smoke.html
@@ -32,12 +33,13 @@ jobs:
           grep -q 'style.css' index.html
           grep -q 'desktop.css' index.html
           grep -q 'minimal.css' index.html
+          grep -q 'layout.css' index.html
           grep -q 'favicon.svg' index.html
       - name: Desktop stylesheet guard
         run: |
           node - <<'NODE'
           const fs = require('node:fs');
-          const css = fs.readFileSync('desktop.css', 'utf8') + '\n' + fs.readFileSync('minimal.css', 'utf8');
+          const css = fs.readFileSync('desktop.css', 'utf8') + '\n' + fs.readFileSync('minimal.css', 'utf8') + '\n' + fs.readFileSync('layout.css', 'utf8');
           const expected = ['.sidebar', '.tiles', '.tile-icon', '.search-form', '.widgets', '.link-context-menu', '@media(max-width:620px)'];
           for (const selector of expected) {
             if (!css.includes(selector)) throw new Error('Missing visual selector: ' + selector);
