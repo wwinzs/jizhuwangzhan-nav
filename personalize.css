@@ -67,39 +67,39 @@
 .app[data-theme=light] .quote-widget{background:rgba(245,247,255,.92)!important}
 .app[data-theme=light] .quote-foot{border-color:#cad6e6}
 .app[data-theme=light] .widget .month-nav button,.app[data-theme=light] .widget .month-heading button{background:#e8eefb;color:#253a53}
-.app[data-theme=light] .dialog{background:#f6f9ff;color:#233552;border-color:#fff}
-.app[data-theme=light] .dialog .dialog-head small{color:#5873a4}
-.app[data-theme=light] .dialog .close{color:#2c4165}
-.app[data-theme=light] .dialog .setting-section{border-color:#d6dfed}
-.app[data-theme=light] .dialog .setting-section h3,
-.app[data-theme=light] .dialog .setting-section p,
-.app[data-theme=light] .dialog .dialog-inner>label,
-.app[data-theme=light] .dialog .two-cols>label,
-.app[data-theme=light] .dialog .widget-manager-name,
-.app[data-theme=light] .dialog .wallpaper-tuning label,
-.app[data-theme=light] .dialog .wallpaper-tuning output,
-.app[data-theme=light] .dialog .custom-engine-setting,
-.app[data-theme=light] .dialog .icon-editor>label,
-.app[data-theme=light] .dialog .widget-position-label{color:#304461}
-.app[data-theme=light] .dialog label input:not([type=checkbox]),
-.app[data-theme=light] .dialog label select,
-.app[data-theme=light] .dialog .custom-engine-setting input,
-.app[data-theme=light] .dialog .icon-editor>label select,
-.app[data-theme=light] .dialog .widget-position-label select,
-.app[data-theme=light] .dialog .widget-manager-row select{
+html[data-theme=light] .dialog{background:#f6f9ff;color:#233552;border-color:#fff}
+html[data-theme=light] .dialog .dialog-head small{color:#5873a4}
+html[data-theme=light] .dialog .close{color:#2c4165}
+html[data-theme=light] .dialog .setting-section{border-color:#d6dfed}
+html[data-theme=light] .dialog .setting-section h3,
+html[data-theme=light] .dialog .setting-section p,
+html[data-theme=light] .dialog .dialog-inner>label,
+html[data-theme=light] .dialog .two-cols>label,
+html[data-theme=light] .dialog .widget-manager-name,
+html[data-theme=light] .dialog .wallpaper-tuning label,
+html[data-theme=light] .dialog .wallpaper-tuning output,
+html[data-theme=light] .dialog .custom-engine-setting,
+html[data-theme=light] .dialog .icon-editor>label,
+html[data-theme=light] .dialog .widget-position-label{color:#304461}
+html[data-theme=light] .dialog label input:not([type=checkbox]),
+html[data-theme=light] .dialog label select,
+html[data-theme=light] .dialog .custom-engine-setting input,
+html[data-theme=light] .dialog .icon-editor>label select,
+html[data-theme=light] .dialog .widget-position-label select,
+html[data-theme=light] .dialog .widget-manager-row select{
   background:#fff;border-color:#c9d6e9;color:#263b58
 }
-.app[data-theme=light] .dialog .ghost,
-.app[data-theme=light] .dialog .choice-row button,
-.app[data-theme=light] .dialog .wallpaper-options button,
-.app[data-theme=light] .dialog .widget-manager-row button{color:#274263;background:#e4ecfa;border-color:#b6c8e2}
-.app[data-theme=light] .dialog .choice-row button.selected,
-.app[data-theme=light] .dialog .wallpaper-options button.selected{background:#c3d4f7;border-color:#6e8ad0}
-.app[data-theme=light] .dialog .field-hint{color:#576c8b}
-.app[data-theme=light] .dialog .manage-row{border-color:#d4dfea;color:#273b5a}
-.app[data-theme=light] .dialog .icon-editor-preview{background:#e8eefb;color:#243a54;border-color:#bcd0ed}
-.app[data-theme=light] .dialog .form-error{color:#a73737}
-.app[data-theme=light] .dialog .folder-subtitle{color:#59708f}
+html[data-theme=light] .dialog .ghost,
+html[data-theme=light] .dialog .choice-row button,
+html[data-theme=light] .dialog .wallpaper-options button,
+html[data-theme=light] .dialog .widget-manager-row button{color:#274263;background:#e4ecfa;border-color:#b6c8e2}
+html[data-theme=light] .dialog .choice-row button.selected,
+html[data-theme=light] .dialog .wallpaper-options button.selected{background:#c3d4f7;border-color:#6e8ad0}
+html[data-theme=light] .dialog .field-hint{color:#576c8b}
+html[data-theme=light] .dialog .manage-row{border-color:#d4dfea;color:#273b5a}
+html[data-theme=light] .dialog .icon-editor-preview{background:#e8eefb;color:#243a54;border-color:#bcd0ed}
+html[data-theme=light] .dialog .form-error{color:#a73737}
+html[data-theme=light] .dialog .folder-subtitle{color:#59708f}
 @media(max-width:620px){
   .wallpaper-gallery{grid-template-columns:repeat(2,minmax(0,1fr))}
   .wallpaper-gallery .wallpaper-thumb{height:56px}
