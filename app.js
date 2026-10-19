@@ -1030,7 +1030,7 @@
     if(file.size>2000000){toast('书签 HTML 不应超过 2MB');return;}
     try {
       var text=await file.text(), entries=parseBookmarks(text);
-      var proposed=clone(state.data), seen=new Set(proposed.links.map(function(l){return l.url;}));
+      var proposed=clone(state.data), seen=new Set(proposed.links.map(function(l){return safeUrl(l.url)||l.url;}));
       var mapped=new Map(proposed.groups.map(function(g){return [g.name.toLocaleLowerCase(),g.id];}));
       var added=0, duplicates=0, invalid=0, skipped=0;
       if(entries.length===0)throw Error('未检测到有效的 HTTP/HTTPS 浏览器书签');
