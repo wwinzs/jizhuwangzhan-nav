@@ -37,7 +37,7 @@
     ok(saved().groups.some(g=>g.name==='我的研究'),'bookmark folder creates category');
     const research=saved().groups.find(g=>g.name==='我的研究');
     ok(saved().links.filter(l=>l.groupId===research.id&&l.url.includes('example.org')).length===2,'new bookmarks assigned to intended category');
-    ok(saved().links.filter(l=>l.url==='https://github.com/').length===1,'duplicate bookmark URL not added');
+    ok(saved().links.filter(l=>/^https:\/\/github\.com\/?$/.test(l.url)).length===1,'duplicate bookmark URL not added');
     ok(!saved().links.some(l=>l.name==='不安全的网站'),'non http(s) links ignored');
     ok(el('storageMeter').textContent.includes('20 个网站'),'storage meter updates after import');
     ok(el('bookmarkSummary').textContent.includes('跳过 1 个重复'),'user sees duplicate summary');
