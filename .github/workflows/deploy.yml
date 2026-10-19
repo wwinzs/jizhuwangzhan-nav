@@ -22,11 +22,13 @@ jobs:
         with:
           node-version: '22'
       - name: Check JavaScript
-        run: node --check app.js
+        run: |
+          node --check app.js
+          node --check auth-client.js
       - name: Prepare release
         run: |
           mkdir dist
-          cp index.html app.js style.css desktop.css minimal.css layout.css personalize.css data.css favicon.svg dist/
+          cp index.html app.js auth-client.js style.css desktop.css minimal.css layout.css personalize.css data.css auth.css favicon.svg dist/
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with:
