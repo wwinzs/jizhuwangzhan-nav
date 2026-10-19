@@ -1122,13 +1122,58 @@
   function wallpaperRefresh() {
     if(save())applySettings();
   }
-  function setWallpaperFromFile(e) {
-    var file=e.target.files && e.target.files[0]; e.target.value=''; if(!file) return;
-    if(!['image/png','image/jpeg','image/webp'].includes(file.type)||file.size>2000000){ toast('请上传 2MB 内的 PNG/JPG/WebP 图片'); return; }
-    var reader=new FileReader();
-    reader.onload=function(){ var result=String(reader.result||''); if(!/^data:image\/(?:png|jpeg|webp);base64,/.test(result)){ toast('壁纸格式无效'); return; } state.data.settings.customWallpaper=result; state.data.settings.wallpaper='custom'; if(save()){ applySettings(); toast('壁纸已更换'); } };
-    reader.onerror=function(){ toast('壁纸读取失败'); };
-    reader.readAsDataURL(file);
+  function optimizedWallpaper(file) {
+    if(file.size<=240000){
+      return new Promise(function(resolve,reject){
+        var reader=new FileReader();
+        reader.onload=function(){resolve(String(reader.result||''));};
+        reader.onerror=function(){reject(Error('壁纸读取失败'));};
+        reader.readAsDataURL(file);
+      });
+    }
+    return new Promise(function(resolve,reject){
+      var source=URL.createObjectURL(file), img=new Image();
+      function cleanup(){URL.revokeObjectURL(source);}
+      img.onload=function(){
+        try {
+          var canvas=document.createElement('canvas');
+          var maxWidth=1920,maxHeight=1080;
+          var ratio=Math.min(1,maxWidth/img.naturalWidth,maxHeight/img.naturalHeight);
+          if(!Number.isFinite(ratio)||ratio<=0)throw Error('壁纸图片尺寸异常');
+          canvas.width=Math.max(1,Math.round(img.naturalWidth*ratio));
+          canvas.height=Math.max(1,Math.round(img.naturalHeight*ratio));
+          var context=canvas.getContext('2d');
+          if(!context)throw Error('浏览器不支持图片压缩');
+          context.drawImage(img,0,0,canvas.width,canvas.height);
+          var result=canvas.toDataURL('image/webp',.79);
+          if(result.length>2100000){
+            canvas.width=Math.max(1,Math.round(canvas.width*.7));
+            canvas.height=Math.max(1,Math.round(canvas.height*.7));
+            context=canvas.getContext('2d');
+            context.drawImage(img,0,0,canvas.width,canvas.height);
+            result=canvas.toDataURL('image/webp',.65);
+          }
+          if(!/^data:image\/(?:png|jpeg|webp);base64,/.test(result) || result.length>2100000)
+            throw Error('压缩后图片仍过大，请使用尺寸更小的壁纸');
+          cleanup();resolve(result);
+        }catch(err){cleanup();reject(err);}
+      };
+      img.onerror=function(){cleanup();reject(Error('图片解码失败，请确认格式有效'));};
+      img.src=source;
+    });
+  }
+  async function setWallpaperFromFile(e) {
+    var file=e.target.files && e.target.files[0]; e.target.value='';if(!file)return;
+    if(!['image/png','image/jpeg','image/webp'].includes(file.type)||file.size>2000000){
+      toast('请上传 2MB 内的 PNG/JPG/WebP 图片');return;
+    }
+    try{
+      var result=await optimizedWallpaper(file);
+      if(!/^data:image\/(?:png|jpeg|webp);base64,/.test(result))throw Error('壁纸格式无效');
+      state.data.settings.customWallpaper=result;
+      state.data.settings.wallpaper='custom';
+      if(save()){applySettings();toast('壁纸已更换');}
+    }catch(err){toast(err.message||'无法处理壁纸文件');}
   }
   function bind() {
     $('menu').addEventListener('click',openSidebar);
