@@ -913,7 +913,7 @@
     try {
       var incoming = validate(JSON.parse(await file.text()));
       if (!confirm('导入会覆盖当前导航内容。建议先导出备份，确定继续吗？')) return;
-      state.data = incoming; state.activeGroup='all'; if (!save()) return; render(); $('notes').value=state.data.notes; $('noteCount').textContent=state.data.notes.length+' / 10000'; $('settingsDialog').close(); toast('导入成功');
+      state.data = incoming; state.activeGroup='all'; state.layoutEditing=false;state.layoutSelected=null;$('layoutToolbar').hidden=true; if (!save()) return; render(); $('notes').value=state.data.notes; $('noteCount').textContent=state.data.notes.length+' / 10000'; $('settingsDialog').close(); toast('导入成功');
     } catch (err) { toast(err && err.message ? err.message : '文件无法导入'); }
   }
   function setWallpaperFromFile(e) {
@@ -930,6 +930,16 @@
     $('mobileScrim').addEventListener('click',function(){closeMobile(true);});
     $('settingsButton').addEventListener('click',function(){hideContext(false);closeMobile(false);$('settingsDialog').showModal();});
     $('settingsClose').addEventListener('click',function(){ $('settingsDialog').close(); });
+    $('layoutEdit').addEventListener('click',startLayoutEdit);
+    $('layoutDone').addEventListener('click',finishLayoutEdit);
+    $('layoutAutoTidy').addEventListener('click',function(){
+      if(!confirm('自动整理会清除当前自由摆放的位置，是否继续？'))return;
+      autoTidy();
+    });
+    $('widgetPlacement').addEventListener('change',function(){
+      state.data.layout.widgets.placement=this.value==='above'?'above':'below';
+      if(save())applySettings();
+    });
     $('filterToggle').addEventListener('click',function(){
       var filter = $('filter'), opening = filter.hidden;
       filter.hidden = !opening;
@@ -971,6 +981,7 @@
     $('resetBrokenData').addEventListener('click',resetOriginal);
     $('filter').addEventListener('input',renderTiles);
     $('sortMode').addEventListener('click',function(){
+      if(state.layoutEditing)finishLayoutEdit();
       state.sortMode=!state.sortMode;
       this.classList.toggle('active',state.sortMode);
       this.textContent=state.sortMode?'✓ 完成排序':'⇅ 图标排序';
@@ -998,7 +1009,7 @@
     $('export').addEventListener('click',exportBackup); $('import').addEventListener('change',importBackup);
     $('reset').addEventListener('click',function(){
       if(!confirm('确定恢复默认吗？这将清除自定义分类、网址和笔记。建议先导出备份。')) return;
-      state.data=clone(defaults); state.activeGroup='all'; if(!save())return; $('notes').value=state.data.notes;render();$('settingsDialog').close();toast('已恢复默认');
+      state.data=clone(defaults); state.activeGroup='all';state.layoutEditing=false;state.layoutSelected=null;$('layoutToolbar').hidden=true; if(!save())return; $('notes').value=state.data.notes;render();$('settingsDialog').close();toast('已恢复默认');
     });
     $('contextOpen').addEventListener('click',function(){
       var item=contextItem(); if (!item)return;
@@ -1025,7 +1036,13 @@
       if(!$('linkContextMenu').hidden && !$('linkContextMenu').contains(e.target)) hideContext(false);
     });
     window.addEventListener('scroll',function(){hideContext(false);},true);
-    window.addEventListener('resize',function(){hideContext(false);});
+    window.addEventListener('resize',function(){
+      hideContext(false);
+      if(state.data.layout.mode==='manual'){
+        if(state.layoutEditing && !window.matchMedia('(min-width:851px)').matches)finishLayoutEdit();
+        renderTiles();
+      }
+    });
     window.addEventListener('keydown',function(e){
       if(e.key==='Escape'){
         if(!$('linkContextMenu').hidden){e.preventDefault();hideContext(true);return;}
