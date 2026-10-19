@@ -1,0 +1,24 @@
+/* v1.8 数据管理区域：重要状态可见，移动端按钮易触达 */
+.data-actions{align-items:center;gap:9px;margin:14px 0}
+.data-actions .ghost,.data-actions .upload-btn{font-size:12px;min-height:38px}
+.storage-meter{
+  padding:12px 14px;margin:10px 0 14px;
+  border:1px solid rgba(154,193,245,.36);
+  border-radius:12px;background:rgba(99,145,211,.13);
+  line-height:1.65;font-size:12px;color:#dceaff
+}
+.storage-meter.storage-heavy{
+  border-color:rgba(247,179,106,.63);background:rgba(173,106,37,.17);
+  color:#ffe0bc
+}
+html[data-theme=light] .storage-meter{
+  color:#2b4869;background:#e4effd;border-color:#acc7ee
+}
+html[data-theme=light] .storage-meter.storage-heavy{
+  color:#81501f;background:#fff1da;border-color:#e1ad65
+}
+@media(max-width:620px){
+  .data-actions{display:grid;grid-template-columns:1fr 1fr;gap:9px}
+  .data-actions .ghost,.data-actions .upload-btn{display:flex;justify-content:center;text-align:center}
+  .storage-meter{font-size:11px}
+}
