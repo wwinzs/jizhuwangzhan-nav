@@ -1,0 +1,88 @@
+<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><title>v1.9 Auth UI smoke</title></head>
+<body data-test-status="pending"><pre id="result">running</pre><iframe id="site" style="width:980px;height:780px"></iframe>
+<script>
+(async function () {
+  var key='jizhuwangzhan-nav:v1',backup=localStorage.getItem(key);
+  var frame=document.getElementById('site'),checks=0,requests=[],rejectNetwork=false,loggedIn=false;
+  function ok(cond,msg){checks++;if(!cond)throw Error('FAIL: '+msg);}
+  function el(id){return frame.contentDocument.getElementById(id);}
+  function sleep(){return new Promise(function(resolve){setTimeout(resolve,110);});}
+  try {
+    localStorage.removeItem(key);
+    await new Promise(function(resolve,reject){
+      frame.onload=resolve;frame.onerror=reject;
+      frame.src='../index.html?auth-test='+Date.now();
+    });
+    await sleep();
+    ok(!!frame.contentWindow.NavAuth,'auth client loaded');
+    ok(el('accountButton').hidden,'account entry disabled until deployment');
+    ok(!el('accountDialog').open,'account dialog closed initially');
+    ok(el('tiles').querySelectorAll('.tile').length>0,'existing local homepage still renders');
+    var existingData=localStorage.getItem(key);
+    frame.contentWindow.fetch=function(url,opts){
+      requests.push({url:url,options:opts});
+      if(rejectNetwork)return Promise.reject(new TypeError('offline'));
+      var route=String(url).split('/').slice(-2).join('/');
+      var status=200,data;
+      if(route==='auth/me'){
+        if(loggedIn)data={user:{email:'owner@example.com',role:'owner'}};
+        else {status=401;data={error:'Not authenticated'};}
+      } else if(route==='auth/login'){
+        var args=JSON.parse(opts.body);
+        if(args.email==='owner@example.com'&&args.password==='a safe test password'){
+          loggedIn=true;data={user:{email:'owner@example.com',role:'owner'}};
+        }else{status=401;data={error:'Invalid credentials'};}
+      } else if(route==='auth/logout'){loggedIn=false;data={ok:true};}
+      else {status=404;data={error:'Not found'};}
+      return Promise.resolve({
+        ok:status>=200&&status<300,status:status,json:function(){return Promise.resolve(data);}
+      });
+    };
+    frame.contentWindow.NavAuth.initialize({enabled:true});
+    await sleep();
+    ok(el('accountButton').hidden,'cannot activate account on unrelated hostname');
+    frame.contentWindow.NavAuth.initialize({enabled:true,testMode:true,apiBase:'http://127.0.0.1:8766'});
+    await sleep();
+    ok(!el('accountButton').hidden,'test origin can display optional login');
+    ok(requests.some(function(r){return String(r.url).endsWith('/auth/me');}),'current session checked without login');
+    ok(requests.every(function(r){return r.options.credentials==='include';}),'cookies explicitly included on API calls');
+    el('accountButton').click();
+    ok(el('accountDialog').open,'account dialog opens');
+    ok(!el('accountSignedOut').hidden,'signed-out form shown');
+    el('accountEmail').value='owner@example.com';
+    el('accountPassword').value='incorrect';
+    el('accountLoginForm').dispatchEvent(new Event('submit',{bubbles:true,cancelable:true}));
+    await sleep();
+    ok(el('accountMessage').textContent.includes('密码'),'invalid credentials receive error feedback');
+    ok(!el('accountSignedOut').hidden,'invalid login does not become authenticated');
+    el('accountPassword').value='a safe test password';
+    el('accountLoginForm').dispatchEvent(new Event('submit',{bubbles:true,cancelable:true}));
+    await sleep();
+    ok(el('accountSignedOut').hidden,'valid login hides login form');
+    ok(!el('accountSignedIn').hidden,'signed-in state is visible');
+    ok(el('accountIdentity').textContent==='owner@example.com','account email displayed');
+    ok(el('accountPassword').value==='','password cleared from input on success');
+    var loginCall=requests.find(function(r){return String(r.url).endsWith('/auth/login');});
+    ok(loginCall.options.credentials==='include'&&loginCall.options.method==='POST','login uses cookie POST');
+    ok(loginCall.options.headers['Content-Type']==='application/json','login request JSON only');
+    ok(localStorage.getItem(key)===existingData,'login does not modify saved bookmarks');
+    el('accountLogout').click();await sleep();
+    ok(!el('accountSignedOut').hidden,'logout returns to sign-in form');
+    ok(el('accountMessage').textContent.includes('不会被删除'),'logout preserves local navigation');
+    ok(localStorage.getItem(key)===existingData,'logout does not modify saved local data');
+    rejectNetwork=true;
+    await frame.contentWindow.NavAuth.refresh();
+    ok(el('accountMessage').textContent.includes('无法连接账号服务'),'network unavailable gives offline fallback');
+    ok(!el('tiles').querySelectorAll('.tile').length===false,'offline account does not affect navigation');
+    frame.contentWindow.NavAuth.initialize({enabled:false});
+    ok(el('accountButton').hidden,'account feature can be disabled');
+    document.body.dataset.testStatus='PASS';
+    document.getElementById('result').textContent='PASS '+checks+' checks';
+  } catch(err) {
+    document.body.dataset.testStatus='FAIL';
+    document.getElementById('result').textContent='FAIL '+checks+' checks: '+(err.stack||err);
+  } finally {
+    if(backup===null)localStorage.removeItem(key);else localStorage.setItem(key,backup);
+  }
+})();
+</script></body></html>
