@@ -12,6 +12,15 @@
       { id: 'fun', name: '影音娱乐', icon: '♫' }
     ],
     folders: [],
+    layout: {
+      mode:'auto', positions:{},
+      widgets:{
+        order:['quote','calendar','note'],
+        sizes:{quote:'normal',calendar:'normal',note:'normal'},
+        visible:{quote:true,calendar:true,note:true},
+        placement:'below'
+      }
+    },
     links: [
       ['百度','https://www.baidu.com','daily','百','#5a85f4',true],
       ['哔哩哔哩','https://www.bilibili.com','fun','▶','#e978a2',true],
@@ -34,7 +43,7 @@
     ].map(function (l, i) { return { id: 'link-' + i, name: l[0], url: l[1], groupId: l[2], icon: l[3], color: l[4], favorite: l[5] }; }),
     settings: { theme: 'dark', wallpaper: 'aurora', customWallpaper: '', engine: 'baidu', showWidgets: true, compact: false }
   };
-  var state = { data: null, activeGroup: 'all', editingId: null, sortMode: false, focus: false, monthOffset: 0, contextItemId: null, contextTrigger: null, activeFolderId: null, editingFolderId: null };
+  var state = { data: null, activeGroup: 'all', editingId: null, sortMode: false, focus: false, monthOffset: 0, contextItemId: null, contextTrigger: null, activeFolderId: null, editingFolderId: null, layoutEditing:false, layoutSelected:null };
   var toastTimer;
   var brokenRaw = null;
   var lastSavedData = null;
@@ -94,11 +103,35 @@
         favorite: link.favorite === true
       };
     });
+    var rawLayout = raw.layout && typeof raw.layout === 'object' && !Array.isArray(raw.layout) ? raw.layout : {};
+    var rawPositions = rawLayout.positions && typeof rawLayout.positions === 'object' && !Array.isArray(rawLayout.positions) ? rawLayout.positions : {};
+    var positions = Object.create(null), occupied = new Set();
+    var keys = folders.map(function(f){return 'f:'+f.id;}).concat(links.filter(function(l){return !l.folderId;}).map(function(l){return 'l:'+l.id;}));
+    keys.forEach(function(key) {
+      var p=rawPositions[key];
+      if(Number.isInteger(p) && p>=0 && p<2000 && !occupied.has(p)){
+        positions[key]=p;occupied.add(p);
+      }
+    });
+    var rawWidgets = rawLayout.widgets && typeof rawLayout.widgets === 'object' ? rawLayout.widgets : {};
+    var widgetNames=['quote','calendar','note'];
+    var incomingOrder=Array.isArray(rawWidgets.order) ? rawWidgets.order : [];
+    var widgetOrder=widgetNames.filter(function(name){return incomingOrder.includes(name);})
+      .sort(function(a,b){return incomingOrder.indexOf(a)-incomingOrder.indexOf(b);});
+    widgetNames.forEach(function(name){if(!widgetOrder.includes(name))widgetOrder.push(name);});
+    var sizes={}, visibility={};
+    widgetNames.forEach(function(name){
+      sizes[name]=rawWidgets.sizes && ['normal','wide','compact'].includes(rawWidgets.sizes[name]) ? rawWidgets.sizes[name] : 'normal';
+      visibility[name]=!rawWidgets.visible || rawWidgets.visible[name] !== false;
+    });
+    var layout = {mode:rawLayout.mode==='manual'?'manual':'auto',positions:positions,
+      widgets:{order:widgetOrder,sizes:sizes,visible:visibility,
+        placement:rawWidgets.placement==='above'?'above':'below'}};
     var settings = raw.settings && typeof raw.settings === 'object' ? raw.settings : {};
     var wp = ['aurora','dusk','ocean','forest','night','custom'].includes(settings.wallpaper) ? settings.wallpaper : 'aurora';
     var custom = typeof settings.customWallpaper === 'string' && /^data:image\/(?:png|jpeg|webp);base64,[a-z0-9+/=]+$/i.test(settings.customWallpaper) && settings.customWallpaper.length <= 3000000 ? settings.customWallpaper : '';
     return {
-      version: 1, groups: groups, folders: folders, links: links, notes: typeof raw.notes === 'string' ? raw.notes.slice(0, 10000) : '',
+      version: 1, groups: groups, folders: folders, links: links, layout:layout, notes: typeof raw.notes === 'string' ? raw.notes.slice(0, 10000) : '',
       settings: {
         theme: settings.theme === 'light' ? 'light' : 'dark',
         wallpaper: wp === 'custom' && !custom ? 'aurora' : wp, customWallpaper: custom,
