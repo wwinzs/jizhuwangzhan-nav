@@ -58,6 +58,10 @@
       <footer>记住网站 · 让喜欢的网站触手可及 <span>✦</span> <small>Personal Navigation</small></footer>
     </main>
   </div>
+  <div id="layoutToolbar" class="layout-toolbar" hidden role="status">
+    <span>自由排列：点选图标，再点空位；也可拖动图标交换位置</span>
+    <button id="layoutDone" type="button">完成布局</button>
+  </div>
   <div id="linkContextMenu" class="link-context-menu" role="menu" aria-label="网站操作" hidden>
     <button id="contextOpen" type="button" role="menuitem">↗ 在新标签页打开</button>
     <button id="contextFav" type="button" role="menuitem">♡ 加入常用</button>
@@ -105,6 +109,20 @@
     <button id="sortMode" type="button" class="ghost mode-switch" title="拖动图标排序">⇅ 图标排序</button>
   </div>
   <p>使用右键、Shift + F10 或在手机上长按图标，可以编辑、收藏和删除网站。</p>
-</section><section class="setting-section"><h3>⚙ 分类管理</h3><div id="groupManager"></div><button id="manageAddGroup" class="ghost">＋ 新增分类</button></section><section class="setting-section"><h3>▤ 网站文件夹</h3><p>集中整理常用网站；删除文件夹不会删除里面的网站。</p><div id="folderManager"></div><button id="manageAddFolder" type="button" class="ghost">＋ 新建文件夹</button></section><section class="setting-section"><h3>⇪ 数据备份</h3><p>数据保存在当前浏览器，不会自动跨设备同步。</p><div class="settings-actions"><button id="export" class="ghost">↓ 导出 JSON</button><label class="upload-btn">↑ 导入 JSON<input id="import" type="file" accept=".json,application/json" hidden></label></div><button id="reset" class="reset-btn">恢复全部默认设置</button></section></div></div></dialog>
+</section><section class="setting-section">
+  <h3>◫ 桌面布局</h3>
+  <p>可以自由安排图标位置并保留空位；手机使用紧凑布局，避免小屏幕出现大块留白。</p>
+  <div class="settings-actions layout-setting-actions">
+    <button id="layoutEdit" type="button" class="ghost">◫ 开始自由排列</button>
+    <button id="layoutAutoTidy" type="button" class="ghost">⇶ 自动整理图标</button>
+  </div>
+  <p id="layoutModeInfo" class="layout-hint">当前：自动排列</p>
+  <h3 class="widget-settings-title">小组件布局</h3>
+  <label class="widget-position-label">显示位置
+    <select id="widgetPlacement"><option value="below">网站图标下方</option><option value="above">搜索框下方</option></select>
+  </label>
+  <div id="widgetManager" class="widget-manager"></div>
+</section>
+<section class="setting-section"><h3>⚙ 分类管理</h3><div id="groupManager"></div><button id="manageAddGroup" class="ghost">＋ 新增分类</button></section><section class="setting-section"><h3>▤ 网站文件夹</h3><p>集中整理常用网站；删除文件夹不会删除里面的网站。</p><div id="folderManager"></div><button id="manageAddFolder" type="button" class="ghost">＋ 新建文件夹</button></section><section class="setting-section"><h3>⇪ 数据备份</h3><p>数据保存在当前浏览器，不会自动跨设备同步。</p><div class="settings-actions"><button id="export" class="ghost">↓ 导出 JSON</button><label class="upload-btn">↑ 导入 JSON<input id="import" type="file" accept=".json,application/json" hidden></label></div><button id="reset" class="reset-btn">恢复全部默认设置</button></section></div></div></dialog>
 </body>
 </html>
