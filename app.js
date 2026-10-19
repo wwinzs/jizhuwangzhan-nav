@@ -238,6 +238,7 @@
   function applySettings() {
     var s = state.data.settings, app = $('app');
     app.dataset.theme = s.theme; app.dataset.wallpaper = s.wallpaper;
+    document.documentElement.dataset.theme=s.theme;
     app.style.setProperty('--wp-brightness',String((100-s.wallpaperDim)/100));
     app.style.setProperty('--wp-blur',s.wallpaperBlur+'px');
     $('wallpaperDim').value=String(s.wallpaperDim);
