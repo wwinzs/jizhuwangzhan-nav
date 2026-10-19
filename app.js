@@ -208,9 +208,12 @@
     app.dataset.theme = s.theme; app.dataset.wallpaper = s.wallpaper;
     app.classList.toggle('compact', s.compact); app.classList.toggle('focus', state.focus);
     app.classList.toggle('sorting',state.sortMode);
+    app.classList.toggle('manual-layout',desktopManual());
+    app.classList.toggle('layout-editing',state.layoutEditing && desktopManual());
     if (s.wallpaper === 'custom' && s.customWallpaper) app.style.setProperty('--custom-wallpaper', 'url("' + s.customWallpaper + '")');
     else app.style.removeProperty('--custom-wallpaper');
-    $('widgets').hidden = !s.showWidgets;
+    applyWidgetLayout();
+    renderWidgetSettings();
     $('engine').value = s.engine;
     $('showWidgets').checked = s.showWidgets;
     $('compact').checked = s.compact;
@@ -235,7 +238,7 @@
     $('menu').setAttribute('aria-expanded','true');
     $('closeSidebar').focus();
   }
-  function selectGroup(key) { state.activeGroup = key; $('filter').value = ''; render(); closeMobile(); }
+  function selectGroup(key) { if(state.layoutEditing)finishLayoutEdit(); state.activeGroup = key; $('filter').value = ''; render(); closeMobile(); }
   function renderGroups() {
     var nav = $('groupNav'); nav.replaceChildren();
     var choices = [{ id: 'all', icon: '▦', name: '全部站点', count: state.data.links.length }, { id: 'favorites', icon: '♥', name: '我的常用', count: state.data.links.filter(function (v) { return v.favorite; }).length }];
@@ -307,7 +310,7 @@
     } catch (_) { /* 保留字符图标 */ }
     logo.style.background = item.color;
     wrap.dataset.linkId=item.id;
-    wrap.draggable = state.sortMode;
+    wrap.draggable = state.sortMode || state.layoutEditing;
     if (state.sortMode) {
       wrap.addEventListener('dragstart', function (e) {
         if (!e.dataTransfer) return;
@@ -359,7 +362,7 @@
     // 桌面右键、键盘 Shift+F10、触屏长按共用同一菜单。
     link.addEventListener('contextmenu',function(e){
       e.preventDefault();
-      openContext(item,e.clientX,e.clientY,link);
+      if(!state.layoutEditing)openContext(item,e.clientX,e.clientY,link);
     });
     link.addEventListener('keydown',function(e){
       if(state.sortMode && e.altKey && ['ArrowLeft','ArrowUp','ArrowRight','ArrowDown'].includes(e.key)){
@@ -372,7 +375,7 @@
         }
         return;
       }
-      if ((e.shiftKey && e.key === 'F10') || e.key === 'ContextMenu') {
+      if (!state.layoutEditing && ((e.shiftKey && e.key === 'F10') || e.key === 'ContextMenu')) {
         e.preventDefault();
         var b = link.getBoundingClientRect();
         openContext(item,b.left + b.width/2,b.top + b.height/2,link);
@@ -382,7 +385,7 @@
     function cancelPress(){ if (pressTimer !== null) clearTimeout(pressTimer); pressTimer = null; }
     link.addEventListener('pointerdown',function(e){
       cancelPress(); longPressed = false;
-      if (state.sortMode || (e.pointerType !== 'touch' && e.pointerType !== 'pen')) return;
+      if (state.sortMode || state.layoutEditing || (e.pointerType !== 'touch' && e.pointerType !== 'pen')) return;
       originX = e.clientX; originY = e.clientY;
       var x = e.clientX, y = e.clientY;
       pressTimer = setTimeout(function(){
@@ -397,8 +400,9 @@
     link.addEventListener('pointercancel',cancelPress);
     link.addEventListener('pointerleave',cancelPress);
     link.addEventListener('click',function(e){
-      if (state.sortMode || longPressed) { e.preventDefault(); e.stopPropagation(); longPressed=false; }
+      if (state.sortMode || state.layoutEditing || longPressed) { e.preventDefault(); if(!state.layoutEditing)e.stopPropagation(); longPressed=false; }
     });
+    attachLayoutHandlers(wrap,'l:'+item.id);
     return wrap;
   }
   function folderTile(folder) {
@@ -409,9 +413,11 @@
     btn.setAttribute('aria-label',btn.title);
     btn.append(node('span','tile-icon folder-icon','▤'),node('span','tile-name',folder.name),node('span','folder-count',count+' 个'));
     btn.addEventListener('click',function(){
+      if(state.layoutEditing){selectLayoutTile('f:'+folder.id);return;}
       if(state.sortMode){toast('请先退出图标排序模式再打开文件夹');return;}
       openFolder(folder.id);
     });
+    attachLayoutHandlers(btn,'f:'+folder.id);
     return btn;
   }
   function renderFolderContents() {
@@ -523,7 +529,7 @@
       .concat(state.data.links.filter(function(l){return !l.folderId;}).map(function(l){return 'l:'+l.id;}));
   }
   function desktopManual() {
-    return state.data.layout.mode==='manual' && state.activeGroup==='all' &&
+    return state.data.layout.mode==='manual' && !state.sortMode && state.activeGroup==='all' &&
       !$('filter').value.trim() && window.matchMedia('(min-width: 851px)').matches;
   }
   function layoutColumns() {
@@ -750,20 +756,54 @@
       ? state.data.folders.filter(function(f){return state.activeGroup==='all'||f.groupId===state.activeGroup;}) : [];
     var total = state.data.links.filter(scope).length;
     $('sectionName').textContent = (state.activeGroup === 'all' ? '全部站点' : state.activeGroup === 'favorites' ? '我的常用' : (state.data.groups.find(function (g) { return g.id === state.activeGroup; }) || {}).name || '全部站点') + ' · ' + total;
-    folders.forEach(function(f){tiles.append(folderTile(f));});
-    visible.forEach(function(l){tiles.append(tile(l));});
-    if (!term) {
+    var manual=desktopManual(), lastManualSlot=-1, cols=layoutColumns();
+    tiles.classList.toggle('layout-grid',manual);
+    if(manual){
+      var entries=folders.map(function(f){return {key:'f:'+f.id, node:folderTile(f)};})
+        .concat(visible.map(function(l){return {key:'l:'+l.id,node:tile(l)};}));
+      var placements=positionsFor(entries.map(function(e){return e.key;}));
+      var occupied=new Set();
+      entries.forEach(function(entry){
+        var slot=placements[entry.key];
+        entry.node.dataset.layoutSlot=String(slot);
+        entry.node.style.gridColumnStart=String(slot%cols+1);
+        entry.node.style.gridRowStart=String(Math.floor(slot/cols)+1);
+        tiles.append(entry.node);
+        occupied.add(slot);lastManualSlot=Math.max(lastManualSlot,slot);
+      });
+      if(state.layoutEditing){
+        var limit=Math.min(2000,Math.max(cols*3,lastManualSlot+cols+1));
+        for(var slot=0;slot<limit;slot++){
+          if(!occupied.has(slot))tiles.append(layoutSlot(slot));
+        }
+      }
+      highlightSelection();
+    } else {
+      folders.forEach(function(f){tiles.append(folderTile(f));});
+      visible.forEach(function(l){tiles.append(tile(l));});
+    }
+    if (!term && !state.layoutEditing) {
       var add = node('button','tile tile-add'), ico = node('span','tile-icon','＋'), name = node('span','tile-name','添加网站');
       add.append(ico,name); add.addEventListener('click',function () { openEdit(); }); tiles.append(add);
+      if(manual){
+        var addSlot=lastManualSlot+1;
+        add.style.gridColumnStart=String(addSlot%cols+1);
+        add.style.gridRowStart=String(Math.floor(addSlot/cols)+1);
+      }
       if(state.activeGroup!=='favorites'){
         var addFolder=node('button','tile tile-add tile-add-folder');
         addFolder.type='button';addFolder.append(node('span','tile-icon','＋'),node('span','tile-name','新建文件夹'));
         addFolder.addEventListener('click',function(){changeFolder();});
         tiles.append(addFolder);
+        if(manual){
+          var folderSlot=lastManualSlot+2;
+          addFolder.style.gridColumnStart=String(folderSlot%cols+1);
+          addFolder.style.gridRowStart=String(Math.floor(folderSlot/cols)+1);
+        }
       }
     }
     var hint=document.querySelector('.manage-hint');
-    if(hint)hint.textContent=state.sortMode?'排序模式：拖动图标或按 Alt + 方向键':'右键或长按图标进行管理';
+    if(hint)hint.textContent=state.layoutEditing?'自由排列：点选图标并选择空格，或拖动交换位置':state.sortMode?'排序模式：拖动图标或按 Alt + 方向键':'右键或长按图标进行管理';
     $('empty').hidden = visible.length > 0 || folders.length > 0 || !term;
   }
   function renderManager() {
