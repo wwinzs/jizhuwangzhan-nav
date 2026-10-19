@@ -358,6 +358,7 @@
     var link = node('a','tile-link'); link.href = item.url; link.target = '_blank'; link.rel = 'noopener noreferrer';
     link.setAttribute('aria-label',state.sortMode ? '排序 ' + item.name + '，可使用 Alt 加方向键' : '打开 ' + item.name); link.append(logo,title);
     link.style.cssText = 'display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;text-decoration:none;color:inherit;width:100%;height:100%';
+    if(state.layoutEditing)link.draggable=false;
     wrap.append(link);
     // 桌面右键、键盘 Shift+F10、触屏长按共用同一菜单。
     link.addEventListener('contextmenu',function(e){
@@ -413,7 +414,7 @@
     btn.setAttribute('aria-label',btn.title);
     btn.append(node('span','tile-icon folder-icon','▤'),node('span','tile-name',folder.name),node('span','folder-count',count+' 个'));
     btn.addEventListener('click',function(){
-      if(state.layoutEditing){selectLayoutTile('f:'+folder.id);return;}
+      if(state.layoutEditing)return;
       if(state.sortMode){toast('请先退出图标排序模式再打开文件夹');return;}
       openFolder(folder.id);
     });
@@ -765,6 +766,7 @@
       var occupied=new Set();
       entries.forEach(function(entry){
         var slot=placements[entry.key];
+        entry.node.dataset.layoutKey=entry.key;
         entry.node.dataset.layoutSlot=String(slot);
         entry.node.style.gridColumnStart=String(slot%cols+1);
         entry.node.style.gridRowStart=String(Math.floor(slot/cols)+1);
