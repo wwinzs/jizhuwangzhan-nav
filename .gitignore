@@ -1,0 +1,4 @@
+# Local server credentials and user files
+server/config.local.php
+server/runtime/
+.DS_Store
