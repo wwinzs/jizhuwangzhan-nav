@@ -50,6 +50,7 @@
   var brokenRaw = null;
   var lastSavedData = null;
   var editingGroupId = null;
+  var lastStoredRaw = null;
   function clone(x) { return JSON.parse(JSON.stringify(x)); }
   function str(v, max) { return typeof v === 'string' ? v.trim().slice(0, max) : ''; }
   function id() { return window.crypto && crypto.randomUUID ? crypto.randomUUID() : 'id-' + Date.now() + '-' + Math.random().toString(36).slice(2); }
@@ -174,7 +175,7 @@
   }
   function load() {
     var raw = null;
-    try { raw = localStorage.getItem(STORAGE_KEY); }
+    try { raw = localStorage.getItem(STORAGE_KEY); lastStoredRaw = raw; }
     catch (_) { toast('浏览器禁止读取本地存储，本次修改无法持久保存'); return clone(defaults); }
     if (raw !== null) {
       try { return validate(JSON.parse(raw)); }
@@ -200,8 +201,16 @@
       return false;
     }
     try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(state.data));
-      lastSavedData = clone(state.data);
+      if(localStorage.getItem(STORAGE_KEY)!==lastStoredRaw){
+        restoreSnapshot();
+        toast('另一个标签页已修改数据。为避免覆盖，请刷新网页后重试');
+        return false;
+      }
+      var serialized=JSON.stringify(state.data);
+      localStorage.setItem(STORAGE_KEY,serialized);
+      lastStoredRaw=serialized;
+      lastSavedData=clone(state.data);
+      refreshStorageMeter();
       return true;
     } catch (_) {
       restoreSnapshot();
@@ -221,13 +230,15 @@
     if (!confirm('确定重置无法读取的导航数据吗？请先下载原始文件保存。')) return;
     try {
       var fresh = clone(defaults);
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(fresh));
+      var serialized=JSON.stringify(fresh);
+      localStorage.setItem(STORAGE_KEY, serialized);
+      lastStoredRaw=serialized;
       brokenRaw = null; state.data = fresh; lastSavedData = clone(fresh);
       state.activeGroup = 'all';
       $('storageRecovery').hidden = true;
       $('notes').value = fresh.notes;
       $('noteCount').textContent = fresh.notes.length + ' / 10000';
-      render(); toast('本地数据已重置，保存功能恢复');
+      render();refreshStorageMeter(); toast('本地数据已重置，保存功能恢复');
     } catch (_) { toast('重置失败：浏览器拒绝写入本地存储'); }
   }
   function toast(message) {
@@ -956,6 +967,107 @@
       box.append(node('span',(current?'day':'')+(isToday?' today':''),String(d)));
     }
   }
+  function formatSize(bytes) {
+    if(bytes<1024)return bytes+' B';
+    if(bytes<1048576)return (bytes/1024).toFixed(1)+' KB';
+    return (bytes/1048576).toFixed(2)+' MB';
+  }
+  function refreshStorageMeter() {
+    var meter=$('storageMeter');
+    if(!meter || !state.data)return;
+    var bytes=new Blob([JSON.stringify(state.data)]).size;
+    var images=state.data.links.filter(function(l){return !!l.iconImage;}).length;
+    meter.textContent='当前导航数据约 '+formatSize(bytes)+' · '+state.data.links.length+
+      ' 个网站 · '+state.data.folders.length+' 个文件夹 · '+images+' 个自定义图标';
+    meter.classList.toggle('storage-heavy',bytes>3*1048576);
+    if(bytes>3*1048576)meter.textContent+='。数据较大，建议导出备份并减少图片尺寸';
+  }
+  function parseBookmarks(html) {
+    var doc=new DOMParser().parseFromString(html,'text/html');
+    var found=[];
+    function add(a,folder) {
+      var url=safeUrl(a.getAttribute('href')||'');
+      if(!url)return;
+      var label=(a.textContent||'').trim().slice(0,40);
+      found.push({url:url,name:label || new URL(url).hostname,folder:(folder||'').trim().slice(0,32)});
+    }
+    function directChild(el,tag) {
+      return Array.from(el.children).find(function(x){return x.tagName===tag;})||null;
+    }
+    function walk(dl,group) {
+      var pending=null;
+      Array.from(dl.children).forEach(function(child){
+        if(child.tagName==='DT'){
+          var heading=directChild(child,'H3');
+          var link=directChild(child,'A');
+          if(heading){
+            var name=(heading.textContent||'').trim().slice(0,32)||group;
+            var nested=directChild(child,'DL')||child.querySelector('dl');
+            if(nested){walk(nested,name);pending=null;}
+            else pending=name;
+          }else if(link){add(link,group);pending=null;}
+          else {
+            var sub=directChild(child,'DL');
+            if(sub)walk(sub,group);
+          }
+        } else if(child.tagName==='DL') {
+          walk(child,pending||group);pending=null;
+        } else if(child.tagName==='A') {
+          add(child,group);
+        } else if(child.tagName==='P'){
+          var nestedDL=directChild(child,'DL');
+          if(nestedDL)walk(nestedDL,pending||group);
+        }
+      });
+    }
+    var roots=Array.from(doc.querySelectorAll('dl')).filter(function(dl){return !dl.parentElement.closest('dl');});
+    roots.forEach(function(dl){walk(dl,'');});
+    if(!roots.length)Array.from(doc.querySelectorAll('a[href]')).forEach(function(a){add(a,'');});
+    return found;
+  }
+  async function importBookmarks(e) {
+    var file=e.target.files && e.target.files[0];e.target.value='';if(!file)return;
+    if(file.size>2000000){toast('书签 HTML 不应超过 2MB');return;}
+    try {
+      var text=await file.text(), entries=parseBookmarks(text);
+      var proposed=clone(state.data), seen=new Set(proposed.links.map(function(l){return safeUrl(l.url)||l.url;}));
+      var mapped=new Map(proposed.groups.map(function(g){return [g.name.toLocaleLowerCase(),g.id];}));
+      var added=0, duplicates=0, invalid=0, skipped=0;
+      if(entries.length===0)throw Error('未检测到有效的 HTTP/HTTPS 浏览器书签');
+      entries.forEach(function(entry){
+        if(seen.has(entry.url)){duplicates++;return;}
+        if(proposed.links.length>=500){skipped++;return;}
+        var groupId=proposed.groups[0].id;
+        if(entry.folder){
+          var code=entry.folder.toLocaleLowerCase();
+          if(mapped.has(code))groupId=mapped.get(code);
+          else if(proposed.groups.length<50){
+            groupId=id();proposed.groups.push({id:groupId,name:entry.folder,icon:'▦'});
+            mapped.set(code,groupId);
+          }
+        }
+        seen.add(entry.url);
+        proposed.links.push({
+          id:id(),name:entry.name,url:entry.url,groupId:groupId,
+          folderId:null,icon:'✦',iconMode:'auto',iconImage:'',
+          color:colorPalette[added%colorPalette.length],favorite:false
+        });
+        added++;
+      });
+      invalid=(text.match(/<a\b/gi)||[]).length-entries.length;
+      var info='可导入 '+added+' 个新网站，跳过 '+duplicates+' 个重复网址'+
+        (invalid>0?'，忽略 '+invalid+' 个无效链接':'')+
+        (skipped>0?'，超出容量 '+skipped+' 个':'')+'。';
+      $('bookmarkSummary').textContent=info;
+      if(!added){toast('没有新的可导入网站');return;}
+      if(!confirm(info+'\n\n新书签将追加到现有收藏，不会覆盖旧数据。确定导入吗？'))return;
+      state.data=proposed;
+      if(!save())return;
+      render();
+      $('settingsDialog').close();
+      toast('成功导入 '+added+' 个网站');
+    } catch(err){toast(err && err.message || '书签 HTML 解析失败');}
+  }
   function exportBackup() {
     var file = new Blob([JSON.stringify(state.data,null,2)],{type:'application/json'}), url=URL.createObjectURL(file), a=document.createElement('a');
     a.href=url; a.download='记住网站-备份-'+new Date().toISOString().slice(0,10)+'.json'; a.click();
@@ -964,7 +1076,7 @@
   async function importBackup(e) {
     var file = e.target.files && e.target.files[0]; e.target.value='';
     if(!file) return;
-    if(file.size>4000000) { toast('备份文件不能超过 4MB'); return; }
+    if(file.size>8000000) { toast('备份文件不能超过 8MB'); return; }
     try {
       var incoming = validate(JSON.parse(await file.text()));
       if (!confirm('导入会覆盖当前导航内容。建议先导出备份，确定继续吗？')) return;
@@ -1010,13 +1122,58 @@
   function wallpaperRefresh() {
     if(save())applySettings();
   }
-  function setWallpaperFromFile(e) {
-    var file=e.target.files && e.target.files[0]; e.target.value=''; if(!file) return;
-    if(!['image/png','image/jpeg','image/webp'].includes(file.type)||file.size>2000000){ toast('请上传 2MB 内的 PNG/JPG/WebP 图片'); return; }
-    var reader=new FileReader();
-    reader.onload=function(){ var result=String(reader.result||''); if(!/^data:image\/(?:png|jpeg|webp);base64,/.test(result)){ toast('壁纸格式无效'); return; } state.data.settings.customWallpaper=result; state.data.settings.wallpaper='custom'; if(save()){ applySettings(); toast('壁纸已更换'); } };
-    reader.onerror=function(){ toast('壁纸读取失败'); };
-    reader.readAsDataURL(file);
+  function optimizedWallpaper(file) {
+    if(file.size<=240000){
+      return new Promise(function(resolve,reject){
+        var reader=new FileReader();
+        reader.onload=function(){resolve(String(reader.result||''));};
+        reader.onerror=function(){reject(Error('壁纸读取失败'));};
+        reader.readAsDataURL(file);
+      });
+    }
+    return new Promise(function(resolve,reject){
+      var source=URL.createObjectURL(file), img=new Image();
+      function cleanup(){URL.revokeObjectURL(source);}
+      img.onload=function(){
+        try {
+          var canvas=document.createElement('canvas');
+          var maxWidth=1920,maxHeight=1080;
+          var ratio=Math.min(1,maxWidth/img.naturalWidth,maxHeight/img.naturalHeight);
+          if(!Number.isFinite(ratio)||ratio<=0)throw Error('壁纸图片尺寸异常');
+          canvas.width=Math.max(1,Math.round(img.naturalWidth*ratio));
+          canvas.height=Math.max(1,Math.round(img.naturalHeight*ratio));
+          var context=canvas.getContext('2d');
+          if(!context)throw Error('浏览器不支持图片压缩');
+          context.drawImage(img,0,0,canvas.width,canvas.height);
+          var result=canvas.toDataURL('image/webp',.79);
+          if(result.length>2100000){
+            canvas.width=Math.max(1,Math.round(canvas.width*.7));
+            canvas.height=Math.max(1,Math.round(canvas.height*.7));
+            context=canvas.getContext('2d');
+            context.drawImage(img,0,0,canvas.width,canvas.height);
+            result=canvas.toDataURL('image/webp',.65);
+          }
+          if(!/^data:image\/(?:png|jpeg|webp);base64,/.test(result) || result.length>2100000)
+            throw Error('压缩后图片仍过大，请使用尺寸更小的壁纸');
+          cleanup();resolve(result);
+        }catch(err){cleanup();reject(err);}
+      };
+      img.onerror=function(){cleanup();reject(Error('图片解码失败，请确认格式有效'));};
+      img.src=source;
+    });
+  }
+  async function setWallpaperFromFile(e) {
+    var file=e.target.files && e.target.files[0]; e.target.value='';if(!file)return;
+    if(!['image/png','image/jpeg','image/webp'].includes(file.type)||file.size>2000000){
+      toast('请上传 2MB 内的 PNG/JPG/WebP 图片');return;
+    }
+    try{
+      var result=await optimizedWallpaper(file);
+      if(!/^data:image\/(?:png|jpeg|webp);base64,/.test(result))throw Error('壁纸格式无效');
+      state.data.settings.customWallpaper=result;
+      state.data.settings.wallpaper='custom';
+      if(save()){applySettings();toast('壁纸已更换');}
+    }catch(err){toast(err.message||'无法处理壁纸文件');}
   }
   function bind() {
     $('menu').addEventListener('click',openSidebar);
@@ -1131,6 +1288,7 @@
     $('showWidgets').addEventListener('change',function(){state.data.settings.showWidgets=this.checked; if(save())applySettings();});
     $('compact').addEventListener('change',function(){state.data.settings.compact=this.checked; if(save())applySettings();});
     $('wallpaperUpload').addEventListener('change',setWallpaperFromFile);
+    $('bookmarkImport').addEventListener('change',importBookmarks);
     $('export').addEventListener('click',exportBackup); $('import').addEventListener('change',importBackup);
     $('reset').addEventListener('click',function(){
       if(!confirm('确定恢复默认吗？这将清除自定义分类、网址和笔记。建议先导出备份。')) return;
@@ -1178,5 +1336,5 @@
     });
   }
   state.data=load(); lastSavedData=clone(state.data); bind(); $('storageRecovery').hidden = brokenRaw === null; $('notes').value=state.data.notes; $('noteCount').textContent=state.data.notes.length+' / 10000';
-  refreshClock(); drawCalendar(); render(); setInterval(function(){refreshClock();if(new Date().getHours()===0 && new Date().getMinutes()===0)drawCalendar();},10000);
+  refreshClock(); drawCalendar(); render(); refreshStorageMeter(); setInterval(function(){refreshClock();if(new Date().getHours()===0 && new Date().getMinutes()===0)drawCalendar();},10000);
 })();
