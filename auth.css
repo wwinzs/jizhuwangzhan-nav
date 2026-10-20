@@ -22,6 +22,13 @@
 #accountChangePasswordToggle{min-height:39px;padding:9px 18px;margin:0 10px 10px 0}
 .account-security-form{margin:12px 0 18px;padding:14px;border:1px solid rgba(255,255,255,.16);border-radius:12px;background:rgba(255,255,255,.05)}
 .account-security-form .account-local-note{margin:0 0 5px}
+.account-session-panel{margin:12px 0 18px;padding:14px;border:1px solid rgba(255,255,255,.16);border-radius:12px;background:rgba(255,255,255,.05)}
+.account-session-list{list-style:none;padding:0;margin:6px 0 12px;display:grid;gap:8px}
+.account-session-list li{font-size:12px;line-height:1.6;padding:9px 10px;border-radius:8px;background:rgba(255,255,255,.08);overflow-wrap:anywhere}
+#accountSessionsToggle,#accountRevokeOthers{min-height:39px;padding:9px 18px;margin:0 8px 10px 0}
+#accountRevokeOthers:disabled,#accountSessionsToggle:disabled{opacity:.52;cursor:not-allowed}
+html[data-theme=light] .account-session-panel{background:rgba(255,255,255,.76);border-color:#bdcde5}
+html[data-theme=light] .account-session-list li{background:#e9eff8}
 .account-security-actions{display:flex;flex-wrap:wrap;gap:8px}
 .account-security-actions button{flex:1;min-width:120px}
 .account-form button:disabled,#accountLogout:disabled,#accountChangePasswordToggle:disabled,#accountChangePasswordCancel:disabled{opacity:.52;cursor:wait}
