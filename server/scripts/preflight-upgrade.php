@@ -36,10 +36,12 @@ function nav_check_upgrade_schema(PDO $db): array {
             if ($step>=2) $requirements['nav_password_reset_tokens']=['user_id','token_hash','expires_at','consumed_at'];
             if ($step>=3) $requirements['nav_reset_mail_queue']=['recipient_hash','recipient_cipher',
                 'nonce','auth_tag','state','attempts','lease_until','created_at'];
+            // MySQL/PDO metadata may uppercase INFORMATION_SCHEMA field keys.
+            // Numeric fetch positions are portable regardless of driver casing.
             $columns=$db->query("SELECT table_name,column_name FROM information_schema.columns
-                WHERE table_schema=DATABASE()")->fetchAll(PDO::FETCH_ASSOC);
+                WHERE table_schema=DATABASE()")->fetchAll(PDO::FETCH_NUM);
             $have=[];
-            foreach ($columns as $row) $have[$row['table_name']][$row['column_name']]=true;
+            foreach ($columns as $row) $have[$row[0]][$row[1]]=true;
             foreach ($requirements as $table=>$required) {
                 foreach ($required as $column) {
                     if (empty($have[$table][$column]))
