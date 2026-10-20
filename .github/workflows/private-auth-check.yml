@@ -56,6 +56,7 @@ jobs:
           ];
           PHP
           MYSQL_PWD=integration_only_password mysql -h 127.0.0.1 -u root nav_ci < server/schema.sql
+          MYSQL_PWD=integration_only_password mysql -h 127.0.0.1 -u root nav_ci < server/migrations/001_security_events.sql
           printf '%s\n%s\n' 'a very long CI password 987654!' 'a very long CI password 987654!' |
             php server/scripts/create-owner.php owner@example.com
           if printf '%s\n%s\n' 'a very long CI password 987654!' 'a very long CI password 987654!' |
@@ -124,6 +125,7 @@ jobs:
           test "$CODE" = 401
           bash server/tests/session-management-http.sh "$API" "$ORIGIN"
           bash server/tests/password-change-http.sh "$API" "$ORIGIN"
+          php server/tests/audit-recovery.php
           # Seed old rows, run the CLI-only bounded cleanup and prove active rows survive.
           MYSQL_PWD=integration_only_password mysql -h 127.0.0.1 -u root nav_ci <<'SQL'
           INSERT INTO nav_sessions(user_id,token_hash,expires_at)
