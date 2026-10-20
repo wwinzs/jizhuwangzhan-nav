@@ -31,7 +31,7 @@ jobs:
       - name: PHP runtime and MySQL client
         run: |
           sudo apt-get update -qq
-          sudo apt-get install -y -qq php-cli php-mysql default-mysql-client >/dev/null
+          sudo apt-get install -y -qq php-cli php-mysql php-curl default-mysql-client openssl >/dev/null
       - name: PHP lint and password primitives
         run: |
           set -eu
@@ -212,3 +212,48 @@ jobs:
           done
           test "$CODE" = 429
           echo 'Private login, session, CSRF, logout and rate-limit regressions passed'
+
+      - name: SMTP TLS loopback integration (fake mailbox, no real credentials)
+        run: |
+          set -eu
+          openssl req -x509 -newkey rsa:2048 -nodes -days 1 \
+            -keyout /tmp/nav-smtp-key.pem -out /tmp/nav-smtp-cert.pem \
+            -subj '/CN=localhost' -addext 'subjectAltName=DNS:localhost,IP:127.0.0.1' \
+            >/dev/null 2>&1
+          sudo -n python3 -u server/tests/fake-smtps.py \
+            /tmp/nav-smtp-cert.pem /tmp/nav-smtp-key.pem /tmp/nav-smtp-captured.eml \
+            >/tmp/nav-fake-smtps.log 2>&1 &
+          sleep 2
+          cat > server/config.local.php <<'PHP'
+          <?php
+          return [
+            'db_dsn' => 'mysql:host=127.0.0.1;port=3306;dbname=nav_ci;charset=utf8mb4',
+            'db_user' => 'root', 'db_password' => 'integration_only_password',
+            'frontend_origin' => 'https://nav.wwinzs.cn',
+            'app_key' => str_repeat('a',64), 'require_https'=>true,
+            'password_reset_enabled'=>true,
+            'smtp'=>[
+              'host'=>'localhost', 'port'=>465, 'tls'=>'smtps',
+              'username'=>'fixture-user', 'password'=>'fixture-password',
+              'from'=>'no-reply@example.com',
+              'ca_file'=>'/tmp/nav-smtp-cert.pem',
+            ],
+          ];
+          PHP
+          php server/tests/smtp-integration.php
+          python3 - <<'PY'
+          import base64
+          import pathlib
+          text = pathlib.Path('/tmp/nav-smtp-captured.eml').read_text(encoding='ascii')
+          assert 'To: <owner@example.com>' in text
+          assert 'From: <no-reply@example.com>' in text
+          payload = text.split('\r\n\r\n', 1)
+          if len(payload) < 2:
+              payload = text.split('\n\n', 1)
+          assert len(payload) == 2
+          body = base64.b64decode(''.join(payload[1].split())).decode('utf-8')
+          assert 'https://nav.wwinzs.cn/#password-reset=' in body
+          assert 'a' * 64 in body
+          assert '15 分钟' in body
+          print('TLS mail captured, addressed and MIME-decoded with test-only token')
+          PY
