@@ -40,25 +40,26 @@ function nav_mail_ready(): bool {
 }
 
 /** An HTTPS first-party URL with a fragment: reset token is not sent to Nginx in the request URL. */
-function nav_reset_mail_url(string $token): string {
+function nav_reset_mail_url(string $token, ?string $origin = null): string {
     if (!preg_match('/^[a-f0-9]{64}$/D', $token)) throw new InvalidArgumentException('Invalid reset token');
-    $origin = nav_config()['frontend_origin'];
+    $origin = $origin ?? nav_config()['frontend_origin'];
     if (!str_starts_with($origin, 'https://'))
         throw new RuntimeException('Reset link requires an HTTPS website');
     return $origin . '/#password-reset=' . $token;
 }
 
 /** No dynamic headers or attacker-controlled subject/from fields. */
-function nav_reset_mail_content(string $recipient, string $token): string {
+function nav_reset_mail_content(string $recipient, string $token, string $sender, ?string $origin = null): string {
     if (nav_email($recipient) !== $recipient) throw new InvalidArgumentException('Invalid recipient');
-    $link = nav_reset_mail_url($token);
+    if (nav_email($sender) !== $sender) throw new InvalidArgumentException('Invalid sender');
+    $link = nav_reset_mail_url($token, $origin);
     $body = "收到记住网站的密码重置请求。\n\n"
       . "请在 15 分钟内使用以下链接修改密码：\n"
       . $link . "\n\n"
       . "如果不是你操作，请忽略本邮件。不要转发此链接。\n"
       . "新密码设置后，所有旧设备会话将退出。\n";
     return "To: <" . $recipient . ">\r\n"
-      . "From: <" . nav_mail_settings(nav_config())['from'] . ">\r\n"
+      . "From: <" . $sender . ">\r\n"
       . "Subject: =?UTF-8?B?" . base64_encode('记住网站 - 重置登录密码') . "?=\r\n"
       . "MIME-Version: 1.0\r\n"
       . "Content-Type: text/plain; charset=UTF-8\r\n"
@@ -74,7 +75,7 @@ function nav_reset_mail_content(string $recipient, string $token): string {
 function nav_send_reset_mail(string $recipient, string $token): bool {
     $settings = nav_mail_settings(nav_config());
     if (!$settings || nav_email($recipient) !== $recipient) return false;
-    $message = nav_reset_mail_content($recipient, $token);
+    $message = nav_reset_mail_content($recipient, $token, $settings['from']);
     $stream = fopen('php://temp', 'w+b');
     if ($stream === false) return false;
     $curl = null;
