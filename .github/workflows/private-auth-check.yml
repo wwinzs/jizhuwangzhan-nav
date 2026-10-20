@@ -57,6 +57,7 @@ jobs:
           PHP
           MYSQL_PWD=integration_only_password mysql -h 127.0.0.1 -u root nav_ci < server/schema.sql
           MYSQL_PWD=integration_only_password mysql -h 127.0.0.1 -u root nav_ci < server/migrations/001_security_events.sql
+          MYSQL_PWD=integration_only_password mysql -h 127.0.0.1 -u root nav_ci < server/migrations/002_password_reset_tokens.sql
           printf '%s\n%s\n' 'a very long CI password 987654!' 'a very long CI password 987654!' |
             php server/scripts/create-owner.php owner@example.com
           if printf '%s\n%s\n' 'a very long CI password 987654!' 'a very long CI password 987654!' |
@@ -126,6 +127,14 @@ jobs:
           bash server/tests/session-management-http.sh "$API" "$ORIGIN"
           bash server/tests/password-change-http.sh "$API" "$ORIGIN"
           php server/tests/audit-recovery.php
+          php server/tests/password-reset-token.php
+          # Public reset endpoints are deliberately disabled before trusted mail delivery.
+          for route in /auth/password-reset/request /auth/password-reset/confirm; do
+            CODE=$(curl -sS -o /tmp/nav-reset-denied -w '%{http_code}' \
+              -H "Origin: $ORIGIN" -H 'Content-Type: application/json' \
+              --data '{"email":"owner@example.com"}' "$API$route")
+            test "$CODE" = 404
+          done
           # Owner-only audit endpoint: trusted origin and valid session required.
           CODE=$(curl -sS -o /tmp/nav-audit -w '%{http_code}' \
             -H "Origin: $ORIGIN" "$API/auth/security-events")
