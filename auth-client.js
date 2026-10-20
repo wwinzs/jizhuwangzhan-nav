@@ -21,6 +21,14 @@
     $('accountIdentity').textContent = user && typeof user.email === 'string' ? user.email : '';
     $('accountLoginSubmit').disabled = busy;
     $('accountLogout').disabled = busy;
+    $('accountChangePasswordToggle').disabled = busy;
+    $('accountChangePasswordSubmit').disabled = busy;
+    $('accountChangePasswordCancel').disabled = busy;
+    if (!user) {
+      $('accountChangePasswordForm').hidden = true;
+      $('accountChangePasswordToggle').setAttribute('aria-expanded', 'false');
+      $('accountChangePasswordForm').reset();
+    }
   }
 
   async function request(path, options) {
@@ -99,6 +107,61 @@
     } finally {busy=false;paint();}
   }
 
+  function togglePasswordForm(close) {
+    if (!enabled || !user || busy) return;
+    var form = $('accountChangePasswordForm');
+    var show = !close && form.hidden;
+    form.hidden = !show;
+    $('accountChangePasswordToggle').setAttribute('aria-expanded', String(show));
+    if (show) $('accountCurrentPassword').focus();
+    else { form.reset(); setMessage(''); }
+  }
+
+  async function changePassword(event) {
+    event.preventDefault();
+    if (busy || !enabled || !user) return;
+    var current = $('accountCurrentPassword').value;
+    var next = $('accountNewPassword').value;
+    var confirmation = $('accountConfirmPassword').value;
+    if (!current || !next) {
+      setMessage('请填写当前密码和新密码。', true);
+      return;
+    }
+    if (next !== confirmation) {
+      setMessage('两次输入的新密码不一致。', true);
+      return;
+    }
+    var bytes = new TextEncoder().encode(next).length;
+    if (bytes < 14 || bytes > 1024) {
+      setMessage('新密码长度须为 14–1024 字节。', true);
+      return;
+    }
+    if (current === next) {
+      setMessage('新密码不能与当前密码相同。', true);
+      return;
+    }
+    busy = true; paint(); setMessage('正在安全修改密码…');
+    try {
+      var result = await request('/auth/change-password', {
+        method:'POST',
+        headers:{'Content-Type':'application/json', 'Accept':'application/json'},
+        body:JSON.stringify({current_password:current, new_password:next})
+      });
+      if (!result || result.ok !== true || result.reauth_required !== true)
+        throw Error('服务端未确认密码已修改');
+      user = null;
+      $('accountChangePasswordForm').reset();
+      $('accountPassword').value = '';
+      setMessage('密码已修改，所有设备都需重新登录；本地收藏保持不变。');
+    } catch (err) {
+      setMessage(err && err.status === 401 ? '当前密码不正确或登录已过期。' :
+        err && err.status === 409 ? '密码已在其他会话中改变，请重新登录。' :
+        err && err.message || '修改密码失败', true);
+    } finally {
+      busy = false; paint();
+    }
+  }
+
   function initialize(options) {
     options = options || {};
     var allowedHost = location.hostname === AUTH_HOSTNAME;
@@ -122,6 +185,9 @@
     $('accountClose').addEventListener('click',function () {$('accountDialog').close();});
     $('accountLoginForm').addEventListener('submit',login);
     $('accountLogout').addEventListener('click',logout);
+    $('accountChangePasswordToggle').addEventListener('click',function () {togglePasswordForm(false);});
+    $('accountChangePasswordCancel').addEventListener('click',function () {togglePasswordForm(true);});
+    $('accountChangePasswordForm').addEventListener('submit',changePassword);
     window.NavAuth = { initialize:initialize, refresh:refresh };
     initialize({ enabled:false });
   }
