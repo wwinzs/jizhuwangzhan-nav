@@ -295,6 +295,12 @@ jobs:
             -e "SELECT COUNT(*) FROM nav_reset_mail_queue")" = 0
           php server/tests/reset-mail-end-to-end.php
           php server/scripts/check-reset-mail-queue.php
+          # v1.9.6: no stale queued reset request may produce a fresh email.
+          MYSQL_PWD=integration_only_password mysql -h 127.0.0.1 -u root nav_ci \
+            -e "UPDATE nav_reset_mail_queue SET created_at=UTC_TIMESTAMP(6)-INTERVAL 16 MINUTE"
+          php server/scripts/process-reset-mail.php
+          test "$(MYSQL_PWD=integration_only_password mysql -N -h 127.0.0.1 -u root nav_ci \
+            -e "SELECT COUNT(*) FROM nav_reset_mail_queue WHERE created_at<UTC_TIMESTAMP(6)-INTERVAL 15 MINUTE")" = 0
           CODE=$(curl -sS -o /tmp/nav-reset-body -w '%{http_code}' \
             -H 'Origin: https://untrusted.example' -H 'Content-Type: application/json' \
             --data '{"email":"owner@example.com"}' "$API/auth/password-reset/request")
