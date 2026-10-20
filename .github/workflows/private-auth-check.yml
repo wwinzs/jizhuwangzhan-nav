@@ -261,6 +261,19 @@ jobs:
           fi
           chmod 0600 server/config.local.php
           php server/scripts/preflight-worker.php
+          mv server/config.local.php server/config.fixture.local.php
+          ln -s config.fixture.local.php server/config.local.php
+          if php server/scripts/preflight-worker.php; then
+            echo 'Worker preflight followed a config symlink'
+            exit 1
+          fi
+          if php server/scripts/process-reset-mail.php; then
+            echo 'Live worker incorrectly followed a config symlink'
+            exit 1
+          fi
+          rm server/config.local.php
+          mv server/config.fixture.local.php server/config.local.php
+          chmod 0600 server/config.local.php
           php server/tests/smtp-integration.php
           python3 - <<'PY'
           import base64
