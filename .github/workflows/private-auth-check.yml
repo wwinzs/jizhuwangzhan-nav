@@ -58,6 +58,7 @@ jobs:
           MYSQL_PWD=integration_only_password mysql -h 127.0.0.1 -u root nav_ci < server/schema.sql
           MYSQL_PWD=integration_only_password mysql -h 127.0.0.1 -u root nav_ci < server/migrations/001_security_events.sql
           MYSQL_PWD=integration_only_password mysql -h 127.0.0.1 -u root nav_ci < server/migrations/002_password_reset_tokens.sql
+          MYSQL_PWD=integration_only_password mysql -h 127.0.0.1 -u root nav_ci < server/migrations/003_async_reset_mail.sql
           printf '%s\n%s\n' 'a very long CI password 987654!' 'a very long CI password 987654!' |
             php server/scripts/create-owner.php owner@example.com
           if printf '%s\n%s\n' 'a very long CI password 987654!' 'a very long CI password 987654!' |
@@ -262,8 +263,7 @@ jobs:
             -subj '/CN=localhost' >/dev/null 2>&1
           sed -i 's@/tmp/nav-smtp-cert.pem@/tmp/nav-unknown-cert.pem@' server/config.local.php
           php server/tests/smtp-reject-untrusted.php
-          # Exercise the gated public HTTP request with a real loopback SMTPS receiver.
-          # The fixture has only synthetic accounts, credentials and reset messages.
+          # v1.9.3: public HTTP queues both valid and unknown emails identically.
           sed -i 's@/tmp/nav-unknown-cert.pem@/tmp/nav-smtp-cert.pem@' server/config.local.php
           sed -i "s@'require_https'=>true@'require_https'=>false@" server/config.local.php
           sudo rm -f /tmp/nav-smtp-captured.eml
@@ -277,13 +277,19 @@ jobs:
             -H "Origin: $ORIGIN" -H 'Content-Type: application/json' \
             --data '{"email":"unknown@example.com"}' "$API/auth/password-reset/request")
           test "$CODE" = 202
-          test ! -e /tmp/nav-smtp-captured.eml
           CODE=$(curl -sS -o /tmp/nav-reset-known -w '%{http_code}' \
             -H "Origin: $ORIGIN" -H 'Content-Type: application/json' \
             --data '{"email":"owner@example.com"}' "$API/auth/password-reset/request")
           test "$CODE" = 202
           cmp /tmp/nav-reset-unknown /tmp/nav-reset-known
+          test ! -e /tmp/nav-smtp-captured.eml
+          test "$(MYSQL_PWD=integration_only_password mysql -N -h 127.0.0.1 -u root nav_ci \
+            -e "SELECT COUNT(*) FROM nav_reset_mail_queue")" = 2
+          php server/scripts/process-reset-mail.php
           test -s /tmp/nav-smtp-captured.eml
+          test "$(MYSQL_PWD=integration_only_password mysql -N -h 127.0.0.1 -u root nav_ci \
+            -e "SELECT COUNT(*) FROM nav_reset_mail_queue")" = 0
+          php server/tests/reset-mail-end-to-end.php
           CODE=$(curl -sS -o /tmp/nav-reset-body -w '%{http_code}' \
             -H 'Origin: https://untrusted.example' -H 'Content-Type: application/json' \
             --data '{"email":"owner@example.com"}' "$API/auth/password-reset/request")
@@ -293,20 +299,31 @@ jobs:
             --data '{"token":"bad","new_password":"a brand new CI password 76543210!"}' \
             "$API/auth/password-reset/confirm")
           test "$CODE" = 400
-          # With untrusted TLS, still give the generic 202, but discard the grant.
+
+          # v1.9.2: untrusted SMTP never leaves a usable token.
           sed -i 's@/tmp/nav-smtp-cert.pem@/tmp/nav-unknown-cert.pem@' server/config.local.php
           CODE=$(curl -sS -o /tmp/nav-reset-undelivered -w '%{http_code}' \
             -H "Origin: $ORIGIN" -H 'Content-Type: application/json' \
             --data '{"email":"owner@example.com"}' "$API/auth/password-reset/request")
           test "$CODE" = 202
           cmp /tmp/nav-reset-undelivered /tmp/nav-reset-known
+          php server/scripts/process-reset-mail.php
           test "$(MYSQL_PWD=integration_only_password mysql -N -h 127.0.0.1 -u root nav_ci \
-            -e "SELECT COUNT(*) FROM nav_password_reset_tokens WHERE consumed_at IS NULL AND expires_at>UTC_TIMESTAMP(6)")" = 0
-          # The same email throttling also applies to addresses without an account.
+            -e "SELECT attempts FROM nav_reset_mail_queue LIMIT 1")" = 1
+          test "$(MYSQL_PWD=integration_only_password mysql -N -h 127.0.0.1 -u root nav_ci \
+            -e "SELECT consumed_at IS NOT NULL FROM nav_password_reset_tokens ORDER BY id DESC LIMIT 1")" = 1
+          # CI force-advances only the synthetic job to exercise both retries.
+          for attempts in 2 3; do
+            MYSQL_PWD=integration_only_password mysql -h 127.0.0.1 -u root nav_ci \
+              -e "UPDATE nav_reset_mail_queue SET available_at=UTC_TIMESTAMP(6)-INTERVAL 1 SECOND"
+            php server/scripts/process-reset-mail.php
+          done
+          test "$(MYSQL_PWD=integration_only_password mysql -N -h 127.0.0.1 -u root nav_ci \
+            -e "SELECT COUNT(*) FROM nav_reset_mail_queue")" = 0
           for i in 1 2 3; do
             CODE=$(curl -sS -o /tmp/nav-reset-limit -w '%{http_code}' \
               -H "Origin: $ORIGIN" -H 'Content-Type: application/json' \
               --data '{"email":"unknown@example.com"}' "$API/auth/password-reset/request")
           done
           test "$CODE" = 429
-          echo 'Generic request results, Origin, JSON validation, SMTP failure invalidation and throttling passed'
+          echo 'Queued HTTP recovery, encrypted recipient, trusted SMTP, one-use reset and retry caps passed'
