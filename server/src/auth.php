@@ -217,17 +217,40 @@ function nav_active_sessions(PDO $db, int $userId): array {
  * End other sessions while retaining the authenticated caller's session.
  * Authentication and trusted Origin checks belong to the HTTP route.
  */
-function nav_revoke_other_sessions(PDO $db, int $userId): int {
+/**
+ * End the owner's other sessions while preserving a STILL-valid caller.
+ * The owner row lock serializes against password rotation and login. Never
+ * apply a stale request authenticated before concurrent password reset.
+ * Null signals that the caller has become unauthenticated.
+ */
+function nav_revoke_other_sessions(PDO $db, int $userId): ?int {
     $token = $_COOKIE['__Host-nav_session'] ?? '';
-    if (!is_string($token) || !preg_match('/^[0-9a-f]{64}$/', $token)) return 0;
+    if (!is_string($token) || !preg_match('/^[0-9a-f]{64}$/D', $token)) return null;
+    $hash = hash('sha256', $token);
     $db->beginTransaction();
     try {
+        $owner = $db->prepare("SELECT id FROM nav_users
+            WHERE id=? AND role='owner' AND status='active'
+            LIMIT 1 FOR UPDATE");
+        $owner->execute([$userId]);
+        if ($owner->fetchColumn() === false) {
+            $db->rollBack();
+            return null;
+        }
+        $caller = $db->prepare("SELECT id FROM nav_sessions
+            WHERE user_id=? AND token_hash=? AND revoked_at IS NULL
+              AND expires_at>UTC_TIMESTAMP(6) LIMIT 1 FOR UPDATE");
+        $caller->execute([$userId,$hash]);
+        if ($caller->fetchColumn() === false) {
+            $db->rollBack();
+            return null;
+        }
         $stmt = $db->prepare(
             "UPDATE nav_sessions SET revoked_at=UTC_TIMESTAMP(6)
              WHERE user_id=? AND token_hash<>? AND revoked_at IS NULL
                AND expires_at>UTC_TIMESTAMP(6)"
         );
-        $stmt->execute([$userId, hash('sha256', $token)]);
+        $stmt->execute([$userId, $hash]);
         $count = $stmt->rowCount();
         if ($count > 0) nav_audit($db, $userId, 'other_sessions_revoked');
         $db->commit();
