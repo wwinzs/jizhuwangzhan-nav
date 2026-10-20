@@ -94,7 +94,9 @@ try {
         // Apply the same limits for existing and nonexistent addresses.
         $allowedIp = nav_limit_try($db, nav_limit_key('reset-ip',$ip), 8);
         $allowedMail = nav_limit_try($db, nav_limit_key('reset-email',$normalized), 3);
-        if (!$allowedIp || !$allowedMail) nav_reply(429, ['error'=>'Too many requests']);
+        $allowedGlobal = nav_limit_try($db, nav_limit_key('reset-global','all'), 200);
+        if (!$allowedIp || !$allowedMail || !$allowedGlobal)
+            nav_reply(429, ['error'=>'Too many requests']);
         // Always enqueue, including unknown accounts. Only the CLI worker
         // can look up an account and send email after this response completes.
         if (!nav_reset_queue_ready()) nav_reply(503, ['error'=>'Service unavailable']);
