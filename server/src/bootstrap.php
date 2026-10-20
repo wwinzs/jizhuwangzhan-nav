@@ -39,6 +39,21 @@ function nav_config(): array {
     return $config;
 }
 
+/**
+ * A CLI mail process must use a regular, private server config file.
+ * Symlinks are rejected to avoid accidentally following files outside the API.
+ */
+function nav_private_config_secure(string $file): bool {
+    if (is_link($file) || !is_file($file)) return false;
+    $stat=@stat($file);
+    if (!$stat || ($stat['mode'] & 0077)!==0) return false;
+    if (function_exists('posix_geteuid')) {
+        $uid=posix_geteuid();
+        if ($uid!==0 && $uid!==$stat['uid']) return false;
+    }
+    return true;
+}
+
 function nav_db(): PDO {
     static $pdo = null;
     if ($pdo instanceof PDO) return $pdo;
