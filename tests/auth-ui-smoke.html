@@ -4,6 +4,7 @@
 (async function () {
   var key='jizhuwangzhan-nav:v1',backup=localStorage.getItem(key);
   var frame=document.getElementById('site'),checks=0,requests=[],rejectNetwork=false,loggedIn=false;
+  var savedPassword='a safe test password';
   function ok(cond,msg){checks++;if(!cond)throw Error('FAIL: '+msg);}
   function el(id){return frame.contentDocument.getElementById(id);}
   function sleep(){return new Promise(function(resolve){setTimeout(resolve,110);});}
@@ -29,9 +30,18 @@
         else {status=401;data={error:'Not authenticated'};}
       } else if(route==='auth/login'){
         var args=JSON.parse(opts.body);
-        if(args.email==='owner@example.com'&&args.password==='a safe test password'){
+        if(args.email==='owner@example.com'&&args.password===savedPassword){
           loggedIn=true;data={user:{email:'owner@example.com',role:'owner'}};
         }else{status=401;data={error:'Invalid credentials'};}
+      } else if(route==='auth/change-password'){
+        var passwordRequest=JSON.parse(opts.body);
+        if(!loggedIn){status=401;data={error:'Not authenticated'};}
+        else if(passwordRequest.current_password!==savedPassword){
+          status=401;data={error:'Invalid current password'};
+        }else{
+          savedPassword=passwordRequest.new_password;
+          loggedIn=false;data={ok:true,reauth_required:true};
+        }
       } else if(route==='auth/logout'){loggedIn=false;data={ok:true};}
       else {status=404;data={error:'Not found'};}
       return Promise.resolve({
@@ -66,6 +76,39 @@
     ok(loginCall.options.credentials==='include'&&loginCall.options.method==='POST','login uses cookie POST');
     ok(loginCall.options.headers['Content-Type']==='application/json','login request JSON only');
     ok(localStorage.getItem(key)===existingData,'login does not modify saved bookmarks');
+    ok(el('accountChangePasswordForm').hidden,'password form initially hidden');
+    el('accountChangePasswordToggle').click();
+    ok(!el('accountChangePasswordForm').hidden,'password change form opened');
+    ok(el('accountChangePasswordToggle').getAttribute('aria-expanded')==='true','password form accessible expanded state');
+    el('accountCurrentPassword').value='incorrect old password';
+    el('accountNewPassword').value='a different safe test password';
+    el('accountConfirmPassword').value='a different safe test password';
+    el('accountChangePasswordForm').dispatchEvent(new Event('submit',{bubbles:true,cancelable:true}));
+    await sleep();
+    ok(el('accountMessage').textContent.includes('当前密码'),'wrong current password shows precise feedback');
+    ok(!el('accountSignedIn').hidden,'wrong current password does not log out');
+    el('accountCurrentPassword').value='a safe test password';
+    el('accountConfirmPassword').value='not the same password';
+    var callsBefore=requests.length;
+    el('accountChangePasswordForm').dispatchEvent(new Event('submit',{bubbles:true,cancelable:true}));
+    await sleep();
+    ok(el('accountMessage').textContent.includes('两次'),'confirmation mismatch shows error');
+    ok(requests.length===callsBefore,'mismatch never sends password to server');
+    el('accountConfirmPassword').value='a different safe test password';
+    el('accountChangePasswordForm').dispatchEvent(new Event('submit',{bubbles:true,cancelable:true}));
+    await sleep();
+    ok(!el('accountSignedOut').hidden,'password change requires new login');
+    ok(el('accountChangePasswordForm').hidden,'password form is hidden on logout');
+    ok(el('accountCurrentPassword').value===''&&el('accountNewPassword').value==='','password change fields cleared');
+    ok(el('accountMessage').textContent.includes('所有设备'),'password rotation feedback explains session revocation');
+    ok(localStorage.getItem(key)===existingData,'password rotation preserves local navigation');
+    var changeCall=requests.find(function(r){return String(r.url).endsWith('/auth/change-password');});
+    ok(changeCall.options.method==='POST'&&changeCall.options.credentials==='include','password change uses credentialed POST');
+    ok(changeCall.options.headers['Content-Type']==='application/json','password change sends JSON');
+    el('accountPassword').value='a different safe test password';
+    el('accountLoginForm').dispatchEvent(new Event('submit',{bubbles:true,cancelable:true}));
+    await sleep();
+    ok(!el('accountSignedIn').hidden,'new password can log back in');
     el('accountLogout').click();await sleep();
     ok(!el('accountSignedOut').hidden,'logout returns to sign-in form');
     ok(el('accountMessage').textContent.includes('不会被删除'),'logout preserves local navigation');
