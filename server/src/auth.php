@@ -339,3 +339,11 @@ function nav_redeem_password_reset_token(PDO $db, string $token, string $newPass
         throw $error;
     }
 }
+
+/** Revoke a single newly issued grant when SMTP fails, preserving any newer grant. */
+function nav_discard_password_reset_token(PDO $db, string $token): void {
+    if (!preg_match('/^[a-f0-9]{64}$/D', $token)) return;
+    $hash = hash_hmac('sha256', $token, nav_config()['app_key']);
+    $db->prepare("UPDATE nav_password_reset_tokens SET consumed_at=UTC_TIMESTAMP(6)
+        WHERE token_hash=? AND consumed_at IS NULL")->execute([$hash]);
+}
