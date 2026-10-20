@@ -13,7 +13,10 @@ jobs:
         with:
           node-version: '22'
       - name: JavaScript syntax
-        run: node --check app.js
+        run: |
+          node --check app.js
+          node --check auth-client.js
+          node --check account-flags.js
       - name: Required assets
         run: |
           test -s index.html
@@ -23,6 +26,11 @@ jobs:
           test -s layout.css
           test -s personalize.css
           test -s data.css
+          test -s auth.css
+          test -s auth-client.js
+          test -s account-flags.js
+          test -s RELEASE_V1930_RC.md
+          test -s tests/auth-ui-smoke.html
           test -s tests/data-smoke.html
           test -s tests/mainland-smoke.html
           for art in aurora dusk ocean forest night; do test -s "assets/wallpapers/$art.svg"; done
@@ -43,6 +51,9 @@ jobs:
           grep -q 'layout.css' index.html
           grep -q 'personalize.css' index.html
           grep -q 'data.css' index.html
+          grep -q 'auth.css' index.html
+          grep -q 'auth-client.js' index.html
+          grep -q 'account-flags.js' index.html
           grep -q 'favicon.svg' index.html
           ! grep -q 'images.unsplash.com' desktop.css
           ! grep -q 'images.unsplash.com' personalize.css
@@ -51,7 +62,7 @@ jobs:
         run: |
           node - <<'NODE'
           const fs = require('node:fs');
-          const css = fs.readFileSync('desktop.css', 'utf8') + '\n' + fs.readFileSync('minimal.css', 'utf8') + '\n' + fs.readFileSync('layout.css', 'utf8') + '\n' + fs.readFileSync('personalize.css', 'utf8') + '\n' + fs.readFileSync('data.css', 'utf8');
+          const css = fs.readFileSync('desktop.css', 'utf8') + '\n' + fs.readFileSync('minimal.css', 'utf8') + '\n' + fs.readFileSync('layout.css', 'utf8') + '\n' + fs.readFileSync('personalize.css', 'utf8') + '\n' + fs.readFileSync('data.css', 'utf8') + '\n' + fs.readFileSync('auth.css', 'utf8');
           const expected = ['.sidebar', '.tiles', '.tile-icon', '.search-form', '.widgets', '.link-context-menu', '@media(max-width:620px)'];
           for (const selector of expected) {
             if (!css.includes(selector)) throw new Error('Missing visual selector: ' + selector);
@@ -153,6 +164,14 @@ jobs:
             exit 1
           fi
           grep -oE 'PASS [0-9]+ checks' /tmp/nav-mainland-result.html | head -1
+          "$BROWSER" --headless --no-sandbox --disable-gpu --disable-dev-shm-usage --virtual-time-budget=10000 --dump-dom http://127.0.0.1:8766/tests/auth-ui-smoke.html > /tmp/nav-auth-ui-result.html 2>/tmp/nav-auth-ui-chrome.log
+          if ! grep -q 'data-test-status="PASS"' /tmp/nav-auth-ui-result.html; then
+            echo "::error::Private account frontend or offline fallback regression failed"
+            grep -oE 'FAIL [^<]+' /tmp/nav-auth-ui-result.html || true
+            tail -25 /tmp/nav-auth-ui-chrome.log || true
+            exit 1
+          fi
+          grep -oE 'PASS [0-9]+ checks' /tmp/nav-auth-ui-result.html | head -1
       - name: Upload visual screenshots
         if: always()
         uses: actions/upload-artifact@v4

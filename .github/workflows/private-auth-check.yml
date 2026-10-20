@@ -1,0 +1,415 @@
+name: Private auth backend CI
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'server/**'
+      - '.github/workflows/private-auth-check.yml'
+  pull_request:
+    paths:
+      - 'server/**'
+      - '.github/workflows/private-auth-check.yml'
+  workflow_dispatch:
+jobs:
+  php-mysql-auth:
+    runs-on: ubuntu-latest
+    services:
+      mysql:
+        image: mysql:8.0
+        env:
+          MYSQL_ROOT_PASSWORD: integration_only_password
+          MYSQL_DATABASE: nav_ci
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping --silent"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=12
+    steps:
+      - uses: actions/checkout@v4
+      - name: PHP runtime and MySQL client
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq php-cli php-mysql php-curl default-mysql-client openssl >/dev/null
+      - name: PHP lint and password primitives
+        run: |
+          set -eu
+          for file in server/src/*.php server/public/*.php server/scripts/*.php server/tests/*.php; do
+            php -l "$file"
+          done
+          php server/tests/security.php
+          bash -n server/tests/password-change-http.sh
+          bash -n server/tests/session-management-http.sh
+      - name: Initialize isolated MySQL test environment
+        run: |
+          set -eu
+          cat > server/config.local.php <<'PHP'
+          <?php
+          return [
+            'db_dsn' => 'mysql:host=127.0.0.1;port=3306;dbname=nav_ci;charset=utf8mb4',
+            'db_user' => 'root',
+            'db_password' => 'integration_only_password',
+            'frontend_origin' => 'http://127.0.0.1:8766',
+            'app_key' => str_repeat('a',64),
+            'require_https' => false,
+          ];
+          PHP
+          MYSQL_PWD=integration_only_password mysql -h 127.0.0.1 -u root nav_ci < server/schema.sql
+          MYSQL_PWD=integration_only_password mysql -h 127.0.0.1 -u root nav_ci < server/migrations/001_security_events.sql
+          MYSQL_PWD=integration_only_password mysql -h 127.0.0.1 -u root nav_ci < server/migrations/002_password_reset_tokens.sql
+          MYSQL_PWD=integration_only_password mysql -h 127.0.0.1 -u root nav_ci < server/migrations/003_async_reset_mail.sql
+          printf '%s\n%s\n' 'a very long CI password 987654!' 'a very long CI password 987654!' |
+            php server/scripts/create-owner.php owner@example.com
+          if printf '%s\n%s\n' 'a very long CI password 987654!' 'a very long CI password 987654!' |
+            php server/scripts/create-owner.php second@example.com; then
+            echo "::error::Second owner account unexpectedly created"
+            exit 1
+          fi
+      - name: Isolated CI database backup restore
+        run: |
+          bash server/tests/backup-restore-ci.sh
+      - name: Read-only staged migration preflight (isolated MySQL database)
+        run: |
+          set -eu
+          php server/tests/preflight-upgrade.php
+          test "$(MYSQL_PWD=integration_only_password mysql -N -h 127.0.0.1 -u root nav_ci \
+            -e "SELECT COUNT(*) FROM information_schema.schemata WHERE schema_name='nav_preflight_stage_ci'")" = 0
+          php server/scripts/preflight-upgrade.php
+      - name: Login password rotation concurrency regression
+        run: |
+          set -eu
+          php server/tests/login-password-race.php
+          php server/tests/owner-login-role.php
+          php server/tests/rate-limit-boundary.php
+          php server/tests/session-cap.php
+          php server/tests/stale-session-revoke.php
+          php server/tests/stale-password-change.php
+          php server/tests/reset-grant-concurrency.php
+      - name: GCM reset queue privacy and lease tests
+        run: |
+          set -eu
+          php server/tests/reset-mail-queue.php
+          php server/tests/reset-queue-concurrency.php
+      - name: Live HTTP authentication regression
+        run: |
+          set -eu
+          php -S 127.0.0.1:8767 -t server/public server/public/index.php >/tmp/nav-auth-http.log 2>&1 &
+          curl --fail --retry 15 --retry-delay 1 --retry-connrefused http://127.0.0.1:8767/health
+          bash server/scripts/check-edge-readonly.sh --ci-loopback
+          API=http://127.0.0.1:8767
+          ORIGIN=http://127.0.0.1:8766
+          # CORS preflight and browser-facing response headers (CI loopback HTTP only).
+          CODE=$(curl -sS -D /tmp/nav-cors-allowed -o /dev/null -w '%{http_code}' \
+            -X OPTIONS -H "Origin: $ORIGIN" \
+            -H 'Access-Control-Request-Method: POST' \
+            -H 'Access-Control-Request-Headers: content-type' "$API/auth/login")
+          test "$CODE" = 204
+          grep -Fiqx "Access-Control-Allow-Origin: $ORIGIN" /tmp/nav-cors-allowed || \
+            grep -Fiq "Access-Control-Allow-Origin: $ORIGIN" /tmp/nav-cors-allowed
+          grep -Fiq 'Access-Control-Allow-Credentials: true' /tmp/nav-cors-allowed
+          grep -Fiq 'Access-Control-Allow-Methods: GET, POST, OPTIONS' /tmp/nav-cors-allowed
+          grep -Fiq 'Access-Control-Allow-Headers: Content-Type' /tmp/nav-cors-allowed
+          grep -Fiq 'Vary: Origin' /tmp/nav-cors-allowed
+          CODE=$(curl -sS -D /tmp/nav-cors-denied -o /dev/null -w '%{http_code}' \
+            -X OPTIONS -H 'Origin: https://untrusted.example' \
+            -H 'Access-Control-Request-Method: POST' "$API/auth/login")
+          test "$CODE" = 403
+          ! grep -Eiq '^Access-Control-Allow-Origin:' /tmp/nav-cors-denied
+          CODE=$(curl -sS -o /dev/null -w '%{http_code}' \
+            -X OPTIONS -H 'Access-Control-Request-Method: POST' "$API/auth/login")
+          test "$CODE" = 403
+          CODE=$(curl -sS -D /tmp/nav-cors-unauth -o /dev/null -w '%{http_code}' \
+            -H "Origin: $ORIGIN" "$API/auth/me")
+          test "$CODE" = 401
+          grep -Fiq "Access-Control-Allow-Origin: $ORIGIN" /tmp/nav-cors-unauth
+          grep -Fiq 'Access-Control-Allow-Credentials: true' /tmp/nav-cors-unauth
+          CODE=$(curl -sS -D /tmp/nav-cors-foreign -o /dev/null -w '%{http_code}' \
+            -H 'Origin: https://untrusted.example' "$API/auth/me")
+          test "$CODE" = 401
+          ! grep -Eiq '^Access-Control-Allow-Origin:' /tmp/nav-cors-foreign
+          echo 'CORS preflight, allowed origin and rejected origin regressions passed'
+          LOGIN='{"email":"owner@example.com","password":"a very long CI password 987654!"}'
+          CODE=$(curl -sS -o /tmp/auth-body -w '%{http_code}' \
+            -H "Origin: $ORIGIN" -H 'Content-Type: application/json-bogus' \
+            --data "$LOGIN" "$API/auth/login")
+          test "$CODE" = 415
+          CODE=$(curl -sS -o /tmp/auth-body -w '%{http_code}' -H 'Content-Type: application/json' -d "$LOGIN" "$API/auth/login")
+          test "$CODE" = 403
+          CODE=$(curl -sS -o /tmp/auth-body -w '%{http_code}' -H "Origin: $ORIGIN" -H 'Content-Type: application/json' -d '{"email":"owner@example.com","password":"wrong"}' "$API/auth/login")
+          test "$CODE" = 401
+          CODE=$(curl -sS -D /tmp/auth-headers -o /tmp/auth-body -w '%{http_code}' -H "Origin: $ORIGIN" -H 'Content-Type: application/json' -d "$LOGIN" "$API/auth/login")
+          test "$CODE" = 200
+          grep -q '"owner@example.com"' /tmp/auth-body
+          grep -iq 'HttpOnly' /tmp/auth-headers
+          grep -iq 'SameSite=Strict' /tmp/auth-headers
+          grep -iq 'Secure' /tmp/auth-headers
+          TOKEN=$(sed -n -E 's/^[Ss]et-[Cc]ookie: __Host-nav_session=([a-f0-9]{64});.*$/\1/p' /tmp/auth-headers | head -1)
+          test "${#TOKEN}" -eq 64
+          CODE=$(curl -sS -o /tmp/me-body -w '%{http_code}' -b "__Host-nav_session=$TOKEN" "$API/auth/me")
+          test "$CODE" = 200
+          grep -q '"owner@example.com"' /tmp/me-body
+          CODE=$(curl -sS -o /tmp/auth-body -w '%{http_code}' -b "__Host-nav_session=$TOKEN" -H 'Origin: https://evil.example' -X POST "$API/auth/logout")
+          test "$CODE" = 403
+          CODE=$(curl -sS -o /tmp/auth-body -w '%{http_code}' -b "__Host-nav_session=$TOKEN" -H "Origin: $ORIGIN" -X POST "$API/auth/logout")
+          test "$CODE" = 200
+          CODE=$(curl -sS -o /tmp/auth-body -w '%{http_code}' -b "__Host-nav_session=$TOKEN" "$API/auth/me")
+          test "$CODE" = 401
+          bash server/tests/session-management-http.sh "$API" "$ORIGIN"
+          bash server/tests/password-change-http.sh "$API" "$ORIGIN"
+          php server/tests/audit-recovery.php
+          php server/tests/password-reset-token.php
+          # Public reset endpoints are deliberately disabled before trusted mail delivery.
+          for route in /auth/password-reset/request /auth/password-reset/confirm; do
+            CODE=$(curl -sS -o /tmp/nav-reset-denied -w '%{http_code}' \
+              -H "Origin: $ORIGIN" -H 'Content-Type: application/json' \
+              --data '{"email":"owner@example.com"}' "$API$route")
+            test "$CODE" = 404
+          done
+          # Owner-only audit endpoint: trusted origin and valid session required.
+          CODE=$(curl -sS -o /tmp/nav-audit -w '%{http_code}' \
+            -H "Origin: $ORIGIN" "$API/auth/security-events")
+          test "$CODE" = 401
+          CODE=$(curl -sS -D /tmp/nav-recover-headers -o /tmp/nav-audit \
+            -w '%{http_code}' -H "Origin: $ORIGIN" \
+            -H 'Content-Type: application/json' \
+            --data '{"email":"owner@example.com","password":"a very long CI password 987654!"}' \
+            "$API/auth/login")
+          test "$CODE" = 200
+          RECOVERY_TOKEN=$(sed -n -E 's/^[Ss]et-[Cc]ookie: __Host-nav_session=([a-f0-9]{64});.*$/\1/p' /tmp/nav-recover-headers | head -1)
+          test "${#RECOVERY_TOKEN}" -eq 64
+          CODE=$(curl -sS -o /tmp/nav-audit -w '%{http_code}' \
+            -b "__Host-nav_session=$RECOVERY_TOKEN" \
+            -H 'Origin: https://untrusted.example' "$API/auth/security-events")
+          test "$CODE" = 403
+          CODE=$(curl -sS -o /tmp/nav-audit -w '%{http_code}' \
+            -b "__Host-nav_session=$RECOVERY_TOKEN" \
+            -H "Origin: $ORIGIN" "$API/auth/security-events")
+          test "$CODE" = 200
+          python3 - <<'PY'
+          import json
+          events=json.load(open('/tmp/nav-audit',encoding='utf-8'))['events']
+          assert events and len(events)<=30
+          assert all(set(e)=={'event_type','created_at'} for e in events)
+          assert 'owner_recovery' in [e['event_type'] for e in events]
+          PY
+          # Seed old rows, run the CLI-only bounded cleanup and prove active rows survive.
+          MYSQL_PWD=integration_only_password mysql -h 127.0.0.1 -u root nav_ci <<'SQL'
+          INSERT INTO nav_sessions(user_id,token_hash,expires_at)
+            SELECT id, REPEAT('e',64), UTC_TIMESTAMP(6) - INTERVAL 1 DAY
+            FROM nav_users WHERE email='owner@example.com';
+          INSERT INTO nav_sessions(user_id,token_hash,expires_at,revoked_at)
+            SELECT id, REPEAT('d',64), UTC_TIMESTAMP(6) + INTERVAL 1 DAY,
+              UTC_TIMESTAMP(6) - INTERVAL 31 DAY
+            FROM nav_users WHERE email='owner@example.com';
+          INSERT INTO nav_login_limits(key_hash,attempts,window_start)
+            VALUES (REPEAT('c',64),3,UTC_TIMESTAMP(6) - INTERVAL 2 DAY);
+          INSERT INTO nav_login_limits(key_hash,attempts,window_start)
+            VALUES (REPEAT('b',64),1,UTC_TIMESTAMP(6));
+          SQL
+          # Seed one 91-day audit event and one recent event; cleanup must be selective.
+          MYSQL_PWD=integration_only_password mysql -h 127.0.0.1 -u root nav_ci <<'SQL'
+          INSERT INTO nav_security_events(user_id,event_type,created_at)
+            SELECT id,'login_success',UTC_TIMESTAMP(6) - INTERVAL 91 DAY
+            FROM nav_users WHERE email='owner@example.com';
+          SQL
+          # The 24-hour retention policy deletes stale grants, not recent grants.
+          MYSQL_PWD=integration_only_password mysql -h 127.0.0.1 -u root nav_ci <<'SQL'
+          INSERT INTO nav_password_reset_tokens(user_id,token_hash,expires_at,consumed_at)
+            SELECT id,REPEAT('8',64),UTC_TIMESTAMP(6)-INTERVAL 2 DAY,
+              UTC_TIMESTAMP(6)-INTERVAL 2 DAY
+            FROM nav_users WHERE email='owner@example.com';
+          INSERT INTO nav_password_reset_tokens(user_id,token_hash,expires_at)
+            SELECT id,REPEAT('7',64),UTC_TIMESTAMP(6)+INTERVAL 10 MINUTE
+            FROM nav_users WHERE email='owner@example.com';
+          SQL
+          # Two synthetic queue rows: one older than 24h and one still active.
+          MYSQL_PWD=integration_only_password mysql -h 127.0.0.1 -u root nav_ci <<'SQL'
+          INSERT INTO nav_reset_mail_queue
+            (recipient_hash,recipient_cipher,nonce,auth_tag,created_at)
+          VALUES
+            (REPEAT('3',64),X'00',UNHEX(REPEAT('00',12)),UNHEX(REPEAT('00',16)),
+             UTC_TIMESTAMP(6)-INTERVAL 25 HOUR),
+            (REPEAT('4',64),X'00',UNHEX(REPEAT('00',12)),UNHEX(REPEAT('00',16)),
+             UTC_TIMESTAMP(6));
+          SQL
+          php server/scripts/cleanup-sessions.php | tee /tmp/nav-maintenance-summary
+          grep -Fq '1 stale mail queue jobs' /tmp/nav-maintenance-summary
+          test "$(MYSQL_PWD=integration_only_password mysql -N -h 127.0.0.1 -u root nav_ci \
+            -e "SELECT COUNT(*) FROM nav_reset_mail_queue WHERE recipient_hash=REPEAT('3',64)")" = 0
+          test "$(MYSQL_PWD=integration_only_password mysql -N -h 127.0.0.1 -u root nav_ci \
+            -e "SELECT COUNT(*) FROM nav_reset_mail_queue WHERE recipient_hash=REPEAT('4',64)")" = 1
+          MYSQL_PWD=integration_only_password mysql -h 127.0.0.1 -u root nav_ci \
+            -e "DELETE FROM nav_reset_mail_queue WHERE recipient_hash=REPEAT('4',64)"
+          test "$(MYSQL_PWD=integration_only_password mysql -N -h 127.0.0.1 -u root nav_ci \
+            -e "SELECT COUNT(*) FROM nav_password_reset_tokens WHERE token_hash=REPEAT('8',64)")" = 0
+          test "$(MYSQL_PWD=integration_only_password mysql -N -h 127.0.0.1 -u root nav_ci \
+            -e "SELECT COUNT(*) FROM nav_password_reset_tokens WHERE token_hash=REPEAT('7',64)")" = 1
+          # That live grant was intentionally retained by the maintenance test.
+          # Consume ONLY this synthetic fixture before the separate SMTP suite.
+          MYSQL_PWD=integration_only_password mysql -h 127.0.0.1 -u root nav_ci \
+            -e "UPDATE nav_password_reset_tokens SET consumed_at=UTC_TIMESTAMP(6)
+                WHERE token_hash=REPEAT('7',64) AND consumed_at IS NULL"
+          test "$(MYSQL_PWD=integration_only_password mysql -N -h 127.0.0.1 -u root nav_ci \
+            -e "SELECT COUNT(*) FROM nav_security_events WHERE created_at<UTC_TIMESTAMP(6)-INTERVAL 90 DAY")" = 0
+          test "$(MYSQL_PWD=integration_only_password mysql -N -h 127.0.0.1 -u root nav_ci \
+            -e "SELECT COUNT(*) FROM nav_security_events WHERE event_type='owner_recovery'")" -ge 1
+          test "$(MYSQL_PWD=integration_only_password mysql -N -h 127.0.0.1 -u root nav_ci \
+            -e "SELECT COUNT(*) FROM nav_sessions WHERE token_hash IN(REPEAT('e',64),REPEAT('d',64))")" = 0
+          test "$(MYSQL_PWD=integration_only_password mysql -N -h 127.0.0.1 -u root nav_ci \
+            -e "SELECT COUNT(*) FROM nav_login_limits WHERE key_hash=REPEAT('c',64)")" = 0
+          test "$(MYSQL_PWD=integration_only_password mysql -N -h 127.0.0.1 -u root nav_ci \
+            -e "SELECT COUNT(*) FROM nav_login_limits WHERE key_hash=REPEAT('b',64)")" = 1
+          for i in $(seq 1 12); do
+            CODE=$(curl -sS -o /tmp/auth-body -w '%{http_code}' -H "Origin: $ORIGIN" -H 'Content-Type: application/json' -d '{"email":"owner@example.com","password":"wrong"}' "$API/auth/login")
+          done
+          test "$CODE" = 429
+          echo 'Private login, session, CSRF, logout and rate-limit regressions passed'
+
+      - name: SMTP TLS loopback integration (fake mailbox, no real credentials)
+        run: |
+          set -eu
+          openssl req -x509 -newkey rsa:2048 -nodes -days 1 \
+            -keyout /tmp/nav-smtp-key.pem -out /tmp/nav-smtp-cert.pem \
+            -subj '/CN=localhost' -addext 'subjectAltName=DNS:localhost,IP:127.0.0.1' \
+            >/dev/null 2>&1
+          sudo -n python3 -u server/tests/fake-smtps.py \
+            /tmp/nav-smtp-cert.pem /tmp/nav-smtp-key.pem /tmp/nav-smtp-captured.eml \
+            >/tmp/nav-fake-smtps.log 2>&1 &
+          sleep 2
+          cat > server/config.local.php <<'PHP'
+          <?php
+          return [
+            'db_dsn' => 'mysql:host=127.0.0.1;port=3306;dbname=nav_ci;charset=utf8mb4',
+            'db_user' => 'root', 'db_password' => 'integration_only_password',
+            'frontend_origin' => 'https://nav.wwinzs.cn',
+            'app_key' => str_repeat('a',64), 'require_https'=>true,
+            'password_reset_enabled'=>true,
+            'smtp'=>[
+              'host'=>'localhost', 'port'=>465, 'tls'=>'smtps',
+              'username'=>'fixture-user', 'password'=>'fixture-password',
+              'from'=>'no-reply@example.com',
+              'ca_file'=>'/tmp/nav-smtp-cert.pem',
+            ],
+          ];
+          PHP
+          # Worker preflight must fail with public-readable config and remain read-only.
+          chmod 0644 server/config.local.php
+          if php server/scripts/preflight-worker.php; then
+            echo 'Worker incorrectly accepted a publicly readable private config'
+            exit 1
+          fi
+          chmod 0600 server/config.local.php
+          php server/scripts/preflight-worker.php
+          mv server/config.local.php server/config.fixture.local.php
+          ln -s config.fixture.local.php server/config.local.php
+          if php server/scripts/preflight-worker.php; then
+            echo 'Worker preflight followed a config symlink'
+            exit 1
+          fi
+          if php server/scripts/process-reset-mail.php; then
+            echo 'Live worker incorrectly followed a config symlink'
+            exit 1
+          fi
+          rm server/config.local.php
+          mv server/config.fixture.local.php server/config.local.php
+          chmod 0600 server/config.local.php
+          php server/tests/smtp-integration.php
+          python3 - <<'PY'
+          import base64
+          import pathlib
+          text = pathlib.Path('/tmp/nav-smtp-captured.eml').read_text(encoding='ascii')
+          assert 'To: <owner@example.com>' in text
+          assert 'From: <no-reply@example.com>' in text
+          payload = text.split('\r\n\r\n', 1)
+          if len(payload) < 2:
+              payload = text.split('\n\n', 1)
+          assert len(payload) == 2
+          body = base64.b64decode(''.join(payload[1].split())).decode('utf-8')
+          assert 'https://nav.wwinzs.cn/#password-reset=' in body
+          assert 'a' * 64 in body
+          assert '15 分钟' in body
+          print('TLS mail captured, addressed and MIME-decoded with test-only token')
+          PY
+          openssl req -x509 -newkey rsa:2048 -nodes -days 1 \
+            -keyout /tmp/nav-unknown-key.pem -out /tmp/nav-unknown-cert.pem \
+            -subj '/CN=localhost' >/dev/null 2>&1
+          sed -i 's@/tmp/nav-smtp-cert.pem@/tmp/nav-unknown-cert.pem@' server/config.local.php
+          php server/tests/smtp-reject-untrusted.php
+          # v1.9.3: public HTTP queues both valid and unknown emails identically.
+          sed -i 's@/tmp/nav-unknown-cert.pem@/tmp/nav-smtp-cert.pem@' server/config.local.php
+          sed -i "s@'require_https'=>true@'require_https'=>false@" server/config.local.php
+          sudo rm -f /tmp/nav-smtp-captured.eml
+          php -S 127.0.0.1:8777 -t server/public server/public/index.php \
+            >/tmp/nav-reset-http.log 2>&1 &
+          curl -fsS --retry 12 --retry-delay 1 --retry-connrefused \
+            http://127.0.0.1:8777/health >/dev/null
+          ORIGIN='https://nav.wwinzs.cn'
+          API='http://127.0.0.1:8777'
+          CODE=$(curl -sS -o /tmp/nav-reset-unknown -w '%{http_code}' \
+            -H "Origin: $ORIGIN" -H 'Content-Type: application/json' \
+            --data '{"email":"unknown@example.com"}' "$API/auth/password-reset/request")
+          test "$CODE" = 202
+          CODE=$(curl -sS -o /tmp/nav-reset-known -w '%{http_code}' \
+            -H "Origin: $ORIGIN" -H 'Content-Type: application/json' \
+            --data '{"email":"owner@example.com"}' "$API/auth/password-reset/request")
+          test "$CODE" = 202
+          cmp /tmp/nav-reset-unknown /tmp/nav-reset-known
+          test ! -e /tmp/nav-smtp-captured.eml
+          test "$(MYSQL_PWD=integration_only_password mysql -N -h 127.0.0.1 -u root nav_ci \
+            -e "SELECT COUNT(*) FROM nav_reset_mail_queue")" = 2
+          # CI must isolate previous password-reset tests from SMTP delivery tests.
+          test "$(MYSQL_PWD=integration_only_password mysql -N -h 127.0.0.1 -u root nav_ci \
+            -e "SELECT COUNT(*) FROM nav_password_reset_tokens WHERE consumed_at IS NULL AND expires_at>UTC_TIMESTAMP(6)")" = 0
+          php server/scripts/process-reset-mail.php
+          test -s /tmp/nav-smtp-captured.eml
+          test "$(MYSQL_PWD=integration_only_password mysql -N -h 127.0.0.1 -u root nav_ci \
+            -e "SELECT COUNT(*) FROM nav_reset_mail_queue")" = 0
+          php server/tests/reset-mail-end-to-end.php
+          php server/scripts/check-reset-mail-queue.php
+          # v1.9.6: construct a stale encrypted request, then ensure the worker drops it.
+          MYSQL_PWD=integration_only_password mysql -h 127.0.0.1 -u root nav_ci \
+            -e "INSERT INTO nav_reset_mail_queue(recipient_hash,recipient_cipher,nonce,auth_tag,created_at)
+                VALUES(REPEAT('1',64),X'00',UNHEX(REPEAT('00',12)),UNHEX(REPEAT('00',16)),
+                       UTC_TIMESTAMP(6)-INTERVAL 16 MINUTE)"
+          MYSQL_PWD=integration_only_password mysql -h 127.0.0.1 -u root nav_ci \
+            -e "SELECT COUNT(*) FROM nav_reset_mail_queue WHERE created_at<UTC_TIMESTAMP(6)-INTERVAL 15 MINUTE" | grep -qx '1'
+          php server/scripts/process-reset-mail.php
+          test "$(MYSQL_PWD=integration_only_password mysql -N -h 127.0.0.1 -u root nav_ci \
+            -e "SELECT COUNT(*) FROM nav_reset_mail_queue WHERE created_at<UTC_TIMESTAMP(6)-INTERVAL 15 MINUTE")" = 0
+          CODE=$(curl -sS -o /tmp/nav-reset-body -w '%{http_code}' \
+            -H 'Origin: https://untrusted.example' -H 'Content-Type: application/json' \
+            --data '{"email":"owner@example.com"}' "$API/auth/password-reset/request")
+          test "$CODE" = 403
+          CODE=$(curl -sS -o /tmp/nav-reset-body -w '%{http_code}' \
+            -H "Origin: $ORIGIN" -H 'Content-Type: application/json' \
+            --data '{"token":"bad","new_password":"a brand new CI password 76543210!"}' \
+            "$API/auth/password-reset/confirm")
+          test "$CODE" = 400
+
+          # CI fixture isolation: a previous successful email must not count as a
+          # new message from this failed TLS attempt.
+          sudo rm -f /tmp/nav-smtp-captured.eml
+          # v1.9.9: untrusted SMTP never leaves a usable token, nor retries it.
+          sed -i 's@/tmp/nav-smtp-cert.pem@/tmp/nav-unknown-cert.pem@' server/config.local.php
+          CODE=$(curl -sS -o /tmp/nav-reset-undelivered -w '%{http_code}' \
+            -H "Origin: $ORIGIN" -H 'Content-Type: application/json' \
+            --data '{"email":"owner@example.com"}' "$API/auth/password-reset/request")
+          test "$CODE" = 202
+          cmp /tmp/nav-reset-undelivered /tmp/nav-reset-known
+          php server/scripts/process-reset-mail.php
+          test "$(MYSQL_PWD=integration_only_password mysql -N -h 127.0.0.1 -u root nav_ci \
+            -e "SELECT COUNT(*) FROM nav_reset_mail_queue")" = 0
+          test "$(MYSQL_PWD=integration_only_password mysql -N -h 127.0.0.1 -u root nav_ci \
+            -e "SELECT consumed_at IS NOT NULL FROM nav_password_reset_tokens ORDER BY id DESC LIMIT 1")" = 1
+          # No automatic retry after a failed/ambiguous SMTP attempt; no duplicate mail.
+          test ! -e /tmp/nav-smtp-captured.eml
+          # The e2e fixture clears preceding login-limit rows before testing
+          # credentials, so exercise all four anonymous email attempts here.
+          for i in 1 2 3 4; do
+            CODE=$(curl -sS -o /tmp/nav-reset-limit -w '%{http_code}' \
+              -H "Origin: $ORIGIN" -H 'Content-Type: application/json' \
+              --data '{"email":"unknown@example.com"}' "$API/auth/password-reset/request")
+          done
+          test "$CODE" = 429
+          echo 'Queued HTTP recovery, encrypted recipient, trusted SMTP, one-use reset and retry caps passed'
