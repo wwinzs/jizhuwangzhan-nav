@@ -35,8 +35,8 @@
     $('accountForgotToggle').hidden = !recoveryAvailable || !!user || !!resetToken;
     $('accountForgotToggle').setAttribute('aria-expanded', String(forgotVisible));
     $('accountForgotForm').hidden = !!user || !!resetToken || !forgotVisible;
-    $('accountResetForm').hidden = !!user || !resetToken;
-    $('accountLoginForm').hidden = !user && (!!resetToken || forgotVisible);
+    $('accountResetForm').hidden = !recoveryAvailable || !!user || !resetToken;
+    $('accountLoginForm').hidden = !user && recoveryAvailable && (!!resetToken || forgotVisible);
 
     if (!user) {
       otherSessionCount = 0;
@@ -339,6 +339,7 @@
     if (options.testMode === true && location.hostname === '127.0.0.1') allowedHost = true;
     enabled = allowedHost && options.enabled === true;
     recoveryAvailable = enabled && options.passwordRecoveryEnabled === true;
+    if (enabled && !recoveryAvailable) resetToken = null;
     API_BASE = options.testMode === true && location.hostname === '127.0.0.1'
       ? (options.apiBase || API_BASE) : 'https://api-nav.wwinzs.cn';
     readResetFragment();
