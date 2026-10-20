@@ -32,7 +32,7 @@ function nav_limit_try(PDO $db, string $key, int $allowed): bool {
     $sql = "INSERT INTO nav_login_limits (key_hash, attempts, window_start)
       VALUES (?, 1, UTC_TIMESTAMP(6))
       ON DUPLICATE KEY UPDATE
-        attempts=IF(window_start < UTC_TIMESTAMP(6) - INTERVAL 15 MINUTE, 1, attempts+1),
+        attempts=IF(window_start < UTC_TIMESTAMP(6) - INTERVAL 15 MINUTE, 1, LEAST(65535,attempts+1)),
         window_start=IF(window_start < UTC_TIMESTAMP(6) - INTERVAL 15 MINUTE, UTC_TIMESTAMP(6), window_start)";
     $db->prepare($sql)->execute([$key]);
     $stmt = $db->prepare('SELECT attempts FROM nav_login_limits WHERE key_hash=?');
