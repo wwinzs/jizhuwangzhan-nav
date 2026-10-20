@@ -1,0 +1,74 @@
+name: v1.9.30 Release Candidate Assets
+on:
+  pull_request:
+    paths:
+      - 'index.html'
+      - 'app.js'
+      - 'auth-client.js'
+      - 'account-flags.js'
+      - '*.css'
+      - 'favicon.svg'
+      - 'assets/wallpapers/**'
+      - 'server/**'
+      - '.github/workflows/rc-v19.yml'
+  workflow_dispatch:
+jobs:
+  candidate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Package audited static navigation files
+        shell: bash
+        run: |
+          set -euo pipefail
+          files=(
+            index.html
+            app.js
+            auth-client.js
+            account-flags.js
+            style.css
+            desktop.css
+            minimal.css
+            layout.css
+            personalize.css
+            data.css
+            auth.css
+            favicon.svg
+            assets/wallpapers/aurora.svg
+            assets/wallpapers/dusk.svg
+            assets/wallpapers/ocean.svg
+            assets/wallpapers/forest.svg
+            assets/wallpapers/night.svg
+          )
+          node --check app.js
+          node --check auth-client.js
+          node --check account-flags.js
+          # The repository candidate must never activate production login.
+          grep -Eq 'loginEnabled:[[:space:]]*false' account-flags.js
+          grep -Eq 'passwordRecoveryEnabled:[[:space:]]*false' account-flags.js
+          grep -Fq '<script src="./account-flags.js" defer></script>' index.html
+          grep -Fq '<script src="./auth-client.js" defer></script>' index.html
+          printf 'NONSECRET_TEST_ONLY\n' > .env
+          for file in "${files[@]}"; do test -s "$file"; test ! -L "$file"; done
+          zip -X -q nav-v1.9.30-frontend-RC.zip "${files[@]}"
+          unzip -tq nav-v1.9.30-frontend-RC.zip
+          printf '%s\n' "${files[@]}" | LC_ALL=C sort > /tmp/expected-frontend
+          unzip -Z -1 nav-v1.9.30-frontend-RC.zip | LC_ALL=C sort > /tmp/actual-frontend
+          diff -u /tmp/expected-frontend /tmp/actual-frontend
+          ! grep -Eq '(^|/)(\.env|config\.local\.php|[^/]*\.bak)$|^server/|^tests/' /tmp/actual-frontend
+      - name: Content integrity and origin warning
+        shell: bash
+        run: |
+          set -euo pipefail
+          # Zip hash + individual source checksums, never package secrets or private config.
+          sha256sum nav-v1.9.30-frontend-RC.zip > nav-v1.9.30-frontend-RC.sha256
+          unzip -p nav-v1.9.30-frontend-RC.zip account-flags.js |
+            grep -Eq 'passwordRecoveryEnabled:[[:space:]]*false'
+          echo 'Frontend release candidate only; API package and VPS deployment remain separate'
+      - uses: actions/upload-artifact@v4
+        with:
+          name: nav-v1.9.30-frontend-RC
+          path: |
+            nav-v1.9.30-frontend-RC.zip
+            nav-v1.9.30-frontend-RC.sha256
+          retention-days: 14
