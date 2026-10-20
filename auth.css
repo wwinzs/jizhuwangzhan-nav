@@ -19,7 +19,12 @@
 .account-message{min-height:20px;margin:0;color:#b7e9cf;font-size:12px;line-height:1.6}
 .account-message.account-error{color:#ffc5be}
 #accountLogout{min-height:39px;padding:9px 18px}
-.account-form button:disabled,#accountLogout:disabled{opacity:.52;cursor:wait}
+#accountChangePasswordToggle{min-height:39px;padding:9px 18px;margin:0 10px 10px 0}
+.account-security-form{margin:12px 0 18px;padding:14px;border:1px solid rgba(255,255,255,.16);border-radius:12px;background:rgba(255,255,255,.05)}
+.account-security-form .account-local-note{margin:0 0 5px}
+.account-security-actions{display:flex;flex-wrap:wrap;gap:8px}
+.account-security-actions button{flex:1;min-width:120px}
+.account-form button:disabled,#accountLogout:disabled,#accountChangePasswordToggle:disabled,#accountChangePasswordCancel:disabled{opacity:.52;cursor:wait}
 html[data-theme=light] .account-form label,
 html[data-theme=light] .account-explain,
 html[data-theme=light] .account-local-note{color:#3c5270}
