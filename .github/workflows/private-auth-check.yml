@@ -253,6 +253,14 @@ jobs:
             ],
           ];
           PHP
+          # Worker preflight must fail with public-readable config and remain read-only.
+          chmod 0644 server/config.local.php
+          if php server/scripts/preflight-worker.php; then
+            echo 'Worker incorrectly accepted a publicly readable private config'
+            exit 1
+          fi
+          chmod 0600 server/config.local.php
+          php server/scripts/preflight-worker.php
           php server/tests/smtp-integration.php
           python3 - <<'PY'
           import base64
