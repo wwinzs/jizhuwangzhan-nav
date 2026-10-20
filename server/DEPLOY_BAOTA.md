@@ -14,7 +14,7 @@
 ## 操作
 
 1. 在宝塔创建并记下新数据库名、数据库专用用户名、密码（不要发给聊天助手或提交 Git）。
-2. 从 GitHub CI 的对应审核提交取得 `nav-v1.9-api-baota-draft.zip`，上传到 `/www/wwwroot/api-nav.wwinzs.cn/`。**仅能使用通过 CI 并经过核查的包**；包内必须有 `server/public/index.php`、`server/src/`、`server/scripts/install-baota.php`、`server/schema.sql`、`server/migrations/001_security_events.sql`；绝不能包含真实 `config.local.php`。
+2. 从 GitHub CI 的对应审核提交取得 `nav-v1.9-api-baota-draft.zip`，上传到 `/www/wwwroot/api-nav.wwinzs.cn/`。**仅能使用通过 CI 并经过核查的包**；包内必须有 `server/public/index.php`、`server/src/`、`server/scripts/install-baota.php`、`server/schema.sql`、`server/migrations/001_security_events.sql`、`server/migrations/002_password_reset_tokens.sql`；绝不能包含真实 `config.local.php`。
 3. SSH（root）执行：
    ```bash
    set -e
@@ -27,7 +27,7 @@
    test -f "$BASE/server/public/index.php"
    /www/server/php/82/bin/php "$BASE/server/scripts/install-baota.php"
    ```
-   安装程序将用**中文**依次提示：数据库名称、专用数据库用户名、数据库密码、站长邮箱、站长密码、确认站长密码。密码输入时不会回显，也不会作为命令行参数或输出内容出现。成功后显示「安装成功：已建立 5 张独立数据表、1 个站长账号，配置文件权限为 0600。」**安装程序拒绝覆盖已有配置、拒绝向非空数据库写入、拒绝不是预期 VPS 目录的安装**。
+   安装程序将用**中文**依次提示：数据库名称、专用数据库用户名、数据库密码、站长邮箱、站长密码、确认站长密码。密码输入时不会回显，也不会作为命令行参数或输出内容出现。成功后显示「安装成功：已建立 6 张独立数据表、1 个站长账号，配置文件权限为 0600。」**安装程序拒绝覆盖已有配置、拒绝向非空数据库写入、拒绝不是预期 VPS 目录的安装**。
 4. 仅在安装成功后，通过本机 HTTPS 校验（不要输出登录密码/Cookie 到聊天）：
    ```bash
    curl --noproxy '*' --resolve api-nav.wwinzs.cn:443:127.0.0.1 \
@@ -88,8 +88,10 @@
 
 ## v1.9 新版本增量升级门禁（仅供评审；当前不执行）
 
-此前已运行的 VPS 账号数据库有 **4 张表**。新的 Draft 安全审计功能需要第 5 张表 `nav_security_events`；绝对不要对现有数据库再次执行 `install-baota.php`，也不要重复执行 `server/schema.sql`。
+**更新：新版开发分支还包含 `002_password_reset_tokens.sql`，因此全新安装为 6 张表；旧库必须依次独立审查与执行 `001`、`002` 两个迁移，而非重装。密码重置的公网申请和确认端点仍然不存在，邮件服务尚未配置。**
 
-升级顺序：先获取 API 站点与独立数据库的可验证备份，明确专属库名和用户，再人工审阅 `server/migrations/001_security_events.sql`，检查新表名是否冲突和建表权限。在**原有独立账号数据库**上单独执行此增量 SQL；核验原有四张表、站长账号及会话均未变化，确认新表存在，之后才安排后端代码更新。任何失败须保留现场，不要自行删除表或重装；正式前端登录开关仍关闭。
+此前已运行的 VPS 账号数据库有 **4 张表**。新的 Draft 安全审计和重置令牌功能需要第 5、6 张表 `nav_security_events`；绝对不要对现有数据库再次执行 `install-baota.php`，也不要重复执行 `server/schema.sql`。
+
+升级顺序：先获取 API 站点与独立数据库的可验证备份，明确专属库名和用户，再人工审阅 `server/migrations/001_security_events.sql`，检查新表名是否冲突和建表权限。在**原有独立账号数据库**上按顺序执行这两项增量 SQL；核验原有四张表、站长账号及会话均未变化，确认新增两表存在，之后才安排后端代码更新。任何失败须保留现场，不要自行删除表或重装；正式前端登录开关仍关闭。
 
 此版本补充了仅 root/配置文件属主可用的 `server/scripts/recover-owner.php`，但**不要求部署时立即运行**；只有站长确实遗忘密码，并在核验数据库迁移和备份后，才在交互式 SSH 终端中按提示执行。代码没有 SMTP、邮件确认或公网找回入口。不要将真实密码、Cookie、数据库 DSN 或配置发送到聊天。
