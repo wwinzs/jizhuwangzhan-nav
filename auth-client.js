@@ -3,7 +3,7 @@
   'use strict';
   var API_BASE = 'https://api-nav.wwinzs.cn';
   var AUTH_HOSTNAME = 'nav.wwinzs.cn';
-  var enabled = false, busy = false, user = null;
+  var enabled = false, busy = false, user = null, otherSessionCount = 0;
   var $ = function (id) { return document.getElementById(id); };
 
   function setMessage(message, isError) {
@@ -24,7 +24,15 @@
     $('accountChangePasswordToggle').disabled = busy;
     $('accountChangePasswordSubmit').disabled = busy;
     $('accountChangePasswordCancel').disabled = busy;
+    $('accountSessionsToggle').disabled = busy;
+    $('accountRevokeOthers').disabled = busy || otherSessionCount === 0;
     if (!user) {
+      otherSessionCount = 0;
+      $('accountSessionsPanel').hidden = true;
+      $('accountSessionsToggle').setAttribute('aria-expanded', 'false');
+      $('accountSessionsList').replaceChildren();
+      $('accountSessionsStatus').textContent = '';
+      $('accountRevokeOthers').disabled = true;
       $('accountChangePasswordForm').hidden = true;
       $('accountChangePasswordToggle').setAttribute('aria-expanded', 'false');
       $('accountChangePasswordForm').reset();
@@ -162,6 +170,68 @@
     }
   }
 
+  async function loadSessions() {
+    if (!enabled || !user) return;
+    $('accountSessionsStatus').textContent = '正在读取登录会话…';
+    try {
+      var payload = await request('/auth/sessions');
+      if (!payload || !Array.isArray(payload.sessions)) throw Error('会话响应无效');
+      var list = $('accountSessionsList');
+      list.replaceChildren();
+      otherSessionCount = 0;
+      payload.sessions.slice(0, 50).forEach(function (item) {
+        if (!item || typeof item.created_at !== 'string' || typeof item.expires_at !== 'string' ||
+            typeof item.current !== 'boolean') return;
+        var created = new Date(item.created_at);
+        var expires = new Date(item.expires_at);
+        if (Number.isNaN(created.getTime()) || Number.isNaN(expires.getTime())) return;
+        var li = document.createElement('li');
+        li.textContent = (item.current ? '当前会话' : '其他会话') +
+          ' · 创建：' + created.toLocaleString('zh-CN') +
+          ' · 到期：' + expires.toLocaleString('zh-CN');
+        list.appendChild(li);
+        if (!item.current) otherSessionCount++;
+      });
+      $('accountSessionsStatus').textContent = '已显示 ' + list.children.length + ' 条有效会话。';
+    } catch (err) {
+      otherSessionCount = 0;
+      $('accountSessionsStatus').textContent = '无法读取会话；请检查账号服务后重试。';
+      $('accountSessionsList').replaceChildren();
+    }
+    paint();
+  }
+
+  function toggleSessionsPanel(close) {
+    if (!enabled || !user || busy) return;
+    var panel = $('accountSessionsPanel');
+    var show = !close && panel.hidden;
+    panel.hidden = !show;
+    $('accountSessionsToggle').setAttribute('aria-expanded', String(show));
+    if (show) loadSessions();
+  }
+
+  async function revokeOtherSessions() {
+    if (!enabled || !user || busy || otherSessionCount < 1) return;
+    if (!window.confirm('确定退出其他所有登录会话吗？当前会话将保持登录。')) return;
+    busy = true; paint();
+    try {
+      var result = await request('/auth/sessions/revoke-others', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json', 'Accept': 'application/json'},
+        body: '{}'
+      });
+      if (!result || result.ok !== true || !Number.isInteger(result.revoked_count))
+        throw Error('服务端未确认会话已撤销');
+      setMessage('已退出其他 ' + result.revoked_count + ' 个会话；当前设备仍保持登录。');
+    } catch (err) {
+      setMessage(err && err.message || '无法撤销其他会话', true);
+      return;
+    } finally {
+      busy = false; paint();
+    }
+    await loadSessions();
+  }
+
   function initialize(options) {
     options = options || {};
     var allowedHost = location.hostname === AUTH_HOSTNAME;
@@ -188,6 +258,8 @@
     $('accountChangePasswordToggle').addEventListener('click',function () {togglePasswordForm(false);});
     $('accountChangePasswordCancel').addEventListener('click',function () {togglePasswordForm(true);});
     $('accountChangePasswordForm').addEventListener('submit',changePassword);
+    $('accountSessionsToggle').addEventListener('click',function () {toggleSessionsPanel(false);});
+    $('accountRevokeOthers').addEventListener('click',revokeOtherSessions);
     window.NavAuth = { initialize:initialize, refresh:refresh };
     initialize({ enabled:false });
   }
