@@ -182,7 +182,21 @@ jobs:
             SELECT id,'login_success',UTC_TIMESTAMP(6) - INTERVAL 91 DAY
             FROM nav_users WHERE email='owner@example.com';
           SQL
+          # The 24-hour retention policy deletes stale grants, not recent grants.
+          MYSQL_PWD=integration_only_password mysql -h 127.0.0.1 -u root nav_ci <<'SQL'
+          INSERT INTO nav_password_reset_tokens(user_id,token_hash,expires_at,consumed_at)
+            SELECT id,REPEAT('8',64),UTC_TIMESTAMP(6)-INTERVAL 2 DAY,
+              UTC_TIMESTAMP(6)-INTERVAL 2 DAY
+            FROM nav_users WHERE email='owner@example.com';
+          INSERT INTO nav_password_reset_tokens(user_id,token_hash,expires_at)
+            SELECT id,REPEAT('7',64),UTC_TIMESTAMP(6)+INTERVAL 10 MINUTE
+            FROM nav_users WHERE email='owner@example.com';
+          SQL
           php server/scripts/cleanup-sessions.php
+          test "$(MYSQL_PWD=integration_only_password mysql -N -h 127.0.0.1 -u root nav_ci \
+            -e "SELECT COUNT(*) FROM nav_password_reset_tokens WHERE token_hash=REPEAT('8',64)")" = 0
+          test "$(MYSQL_PWD=integration_only_password mysql -N -h 127.0.0.1 -u root nav_ci \
+            -e "SELECT COUNT(*) FROM nav_password_reset_tokens WHERE token_hash=REPEAT('7',64)")" = 1
           test "$(MYSQL_PWD=integration_only_password mysql -N -h 127.0.0.1 -u root nav_ci \
             -e "SELECT COUNT(*) FROM nav_security_events WHERE created_at<UTC_TIMESTAMP(6)-INTERVAL 90 DAY")" = 0
           test "$(MYSQL_PWD=integration_only_password mysql -N -h 127.0.0.1 -u root nav_ci \
