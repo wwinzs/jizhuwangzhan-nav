@@ -28,11 +28,15 @@ $job=nav_claim_reset_mail($db);
 expectQueue(is_array($job) && (int)$job['attempts']===0,'first job leased once');
 $next=nav_claim_reset_mail($db);
 expectQueue(is_array($next) && $next['id']!==$job['id'],'leased job cannot be double claimed');
-nav_finish_reset_mail($db,(int)$job['id'],true);
+nav_finish_reset_mail($db,(int)$job['id'],1,true);
 $state=$db->query("SELECT attempts,state FROM nav_reset_mail_queue WHERE id=".(int)$job['id'])
     ->fetch();
 expectQueue((int)$state['attempts']===1 && $state['state']==='pending',
     'failed job retry pending with bounded delay');
-nav_finish_reset_mail($db,(int)$next['id'],false);
+nav_finish_reset_mail($db,(int)$job['id'],0,false);
+$state=$db->query("SELECT attempts,state FROM nav_reset_mail_queue WHERE id=".(int)$job['id'])->fetch();
+expectQueue((int)$state['attempts']===1 && $state['state']==='pending',
+    'stale attempt cannot complete the active queue row');
+nav_finish_reset_mail($db,(int)$next['id'],1,false);
 $db->exec('DELETE FROM nav_reset_mail_queue');
 fwrite(STDOUT,'Encrypted mail queue regression passed.\n');
