@@ -26,6 +26,7 @@ jobs:
           test -s server/src/mail.php
           test -s server/src/reset-queue.php
           test -s server/scripts/process-reset-mail.php
+          test -s server/scripts/check-reset-mail-queue.php
           test -s server/migrations/003_async_reset_mail.sql
           test -s server/scripts/recover-owner.php
           test ! -e server/config.local.php
@@ -36,6 +37,7 @@ jobs:
           unzip -Z -1 nav-v1.9-api-baota-draft.zip | grep -Fx 'server/src/mail.php'
           unzip -Z -1 nav-v1.9-api-baota-draft.zip | grep -Fx 'server/migrations/003_async_reset_mail.sql'
           unzip -Z -1 nav-v1.9-api-baota-draft.zip | grep -Fx 'server/scripts/process-reset-mail.php'
+          unzip -Z -1 nav-v1.9-api-baota-draft.zip | grep -Fx 'server/scripts/check-reset-mail-queue.php'
           unzip -Z -1 nav-v1.9-api-baota-draft.zip | grep -Fx 'server/scripts/recover-owner.php'
           unzip -Z -1 nav-v1.9-api-baota-draft.zip | grep -Fx 'server/scripts/check-auth-baota.sh'
           ! unzip -Z -1 nav-v1.9-api-baota-draft.zip | grep -Eq '(^|/)config\.local\.php$'
