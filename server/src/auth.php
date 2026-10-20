@@ -8,7 +8,7 @@ require_once __DIR__ . '/bootstrap.php';
  */
 function nav_audit(PDO $db, int $userId, string $eventType): void {
     $allowed = ['login_success', 'logout', 'password_changed',
-        'other_sessions_revoked', 'owner_recovery'];
+        'other_sessions_revoked', 'owner_recovery', 'password_reset'];
     if (!in_array($eventType, $allowed, true))
         throw new InvalidArgumentException('Unknown security event');
     $db->prepare('INSERT INTO nav_security_events (user_id,event_type) VALUES (?,?)')
