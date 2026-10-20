@@ -43,6 +43,7 @@ jobs:
           node --check app.js
           node --check auth-client.js
           node --check account-flags.js
+          test -s RELEASE_V1930_RC.md
           # The repository candidate must never activate production login.
           grep -Eq 'loginEnabled:[[:space:]]*false' account-flags.js
           grep -Eq 'passwordRecoveryEnabled:[[:space:]]*false' account-flags.js
