@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="900" viewBox="0 0 1600 900" role="img" aria-label="ocean landscape">
+<defs>
+<linearGradient id="sky" x2="0" y2="1"><stop stop-color="#062c49"/><stop offset=".55" stop-color="#276789"/><stop offset="1" stop-color="#8bc4cd"/></linearGradient>
+<linearGradient id="water" x2=".2" y2="0" x1=".7" y1="1"><stop stop-color="#276789"/><stop offset="1" stop-color="#062c49"/></linearGradient>
+<radialGradient id="glow"><stop stop-color="#e1edf1" stop-opacity=".28"/><stop offset="1" stop-color="#e1edf1" stop-opacity="0"/></radialGradient>
+<linearGradient id="shade" x2=".7" y2="1"><stop stop-color="#081529" stop-opacity=".14"/><stop offset="1" stop-color="#081529" stop-opacity=".46"/></linearGradient>
+</defs>
+<rect width="1600" height="900" fill="url(#sky)"/>
+<ellipse cx="1160" cy="235" rx="360" ry="290" fill="url(#glow)"/>
+<circle cx="1160" cy="235" r="94" fill="#e1edf1" opacity=".44"/>
+
+<path d="M0 555 L145 405 275 500 405 340 560 525 695 390 850 535 1045 290 1205 475 1340 350 1600 540 1600 900 0 900Z" fill="#23647a"/>
+<path d="M0 605 L235 480 370 575 570 425 770 615 950 470 1070 565 1270 425 1485 560 1600 510V900H0Z" fill="#144961" opacity=".95"/>
+<path d="M0 600 Q420 595 800 606 T1600 596 V900 H0Z" fill="url(#water)" opacity=".72"/>
+<g stroke="#d1dbe1" stroke-opacity=".12" fill="none" stroke-width="3"><path d="M0 656 Q240 644 530 654 T1100 649 T1600 654"/><path d="M70 735 Q380 726 690 735 T1380 729"/><path d="M200 822 Q530 810 970 819 T1530 815"/></g>
+<path d="M0 710 L180 618 300 650 480 585 700 735 910 604 1100 674 1300 586 1510 700 1600 670V900H0Z" fill="#082c49"/>
+
+<path d="M0 785 Q350 735 715 807 Q1180 730 1600 782 V900 H0Z" fill="#092b42" opacity=".58"/>
+<rect width="1600" height="900" fill="url(#shade)"/>
+</svg>
