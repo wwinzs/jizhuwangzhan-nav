@@ -28,15 +28,20 @@ $job=nav_claim_reset_mail($db);
 expectQueue(is_array($job) && (int)$job['attempts']===0,'first job leased once');
 $next=nav_claim_reset_mail($db);
 expectQueue(is_array($next) && $next['id']!==$job['id'],'leased job cannot be double claimed');
-nav_finish_reset_mail($db,(int)$job['id'],1,true);
-$state=$db->query("SELECT attempts,state FROM nav_reset_mail_queue WHERE id=".(int)$job['id'])
-    ->fetch();
-expectQueue((int)$state['attempts']===1 && $state['state']==='pending',
-    'failed job retry pending with bounded delay');
-nav_finish_reset_mail($db,(int)$job['id'],0,false);
+// Even an expired lease must not be reclaimed: SMTP may already have accepted it.
+$db->prepare("UPDATE nav_reset_mail_queue
+    SET lease_until=UTC_TIMESTAMP(6)-INTERVAL 1 SECOND WHERE id=?")
+    ->execute([$job['id']]);
+expectQueue(nav_claim_reset_mail($db)===null,
+    'expired in-flight SMTP lease cannot be replayed');
+nav_finish_reset_mail($db,(int)$job['id'],0);
 $state=$db->query("SELECT attempts,state FROM nav_reset_mail_queue WHERE id=".(int)$job['id'])->fetch();
-expectQueue((int)$state['attempts']===1 && $state['state']==='pending',
-    'stale attempt cannot complete the active queue row');
-nav_finish_reset_mail($db,(int)$next['id'],1,false);
+expectQueue((int)$state['attempts']===1 && $state['state']==='processing',
+    'old worker attempt cannot remove a newer claim');
+nav_finish_reset_mail($db,(int)$job['id'],1);
+expectQueue((int)$db->query("SELECT COUNT(*) FROM nav_reset_mail_queue
+    WHERE id=".(int)$job['id'])->fetchColumn()===0,
+    'claimed task removed after one SMTP attempt');
+nav_finish_reset_mail($db,(int)$next['id'],1);
 $db->exec('DELETE FROM nav_reset_mail_queue');
 fwrite(STDOUT,'Encrypted mail queue regression passed.\n');
