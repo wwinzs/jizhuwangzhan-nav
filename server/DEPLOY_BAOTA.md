@@ -67,6 +67,21 @@
 | `POST /auth/logout` | HTTP 200 |
 | 用退出前保留的 Cookie 再查 `GET /auth/me` | HTTP 401 |
 
-**范围限制**：以上属于用户报告的 VPS 本机 HTTPS 真实接口验收，不等于浏览器端跨域、Cookie、PHP-FPM open_basedir、域名公网访问已通过。此前使用手动输入邮箱及 Python 构造 JSON 的脚本返回过 HTTP 401，后来在固定正确邮箱、一次密码输入、PHP 构造 JSON 的闭环中通过。**尚未证明 Python JSON 编码本身有缺陷**，不要据此改动生产鉴权算法。
+**范围限制**：以上属于用户报告的 VPS 本机 HTTPS 真实接口验收，不等于浏览器端跨域、Cookie、PHP-FPM open_basedir、域名公网访问已通过。
+
+### VPS HTTPS CORS 预检（2026-10-20）
+
+用户从 VPS 以本机 `--resolve` 向 `/auth/login` 发起 OPTIONS 请求，`Origin: https://nav.wwinzs.cn`、`Access-Control-Request-Method: POST`、`Access-Control-Request-Headers: content-type`。报告响应：
+
+- HTTP/2 204；
+- `Access-Control-Allow-Origin: https://nav.wwinzs.cn`；
+- `Access-Control-Allow-Credentials: true`；
+- `Access-Control-Allow-Methods: GET, POST, OPTIONS`；
+- `Access-Control-Allow-Headers: Content-Type`；
+- `Vary: Origin`；
+- `Strict-Transport-Security` 出现两次（排查 Nginx 与 PHP 重复设置）。
+
+这确认真实 API 的预检请求成功，但 **尚未完成浏览器发起的跨域 fetch、携带 Cookie 的浏览器登录、真实公网连接验证**。生产前不要仅凭此结果启用 `auth-client.js`。
+此前使用手动输入邮箱及 Python 构造 JSON 的脚本返回过 HTTP 401，后来在固定正确邮箱、一次密码输入、PHP 构造 JSON 的闭环中通过。**尚未证明 Python JSON 编码本身有缺陷**，不要据此改动生产鉴权算法。
 
 **待办**：从导航页原点进行真实浏览器 CORS / Cookie 验证，检查 PHP-FPM 的文件隔离、登录失败策略与站点部署安全，完成审核后再另行开启账号前端开关。保持 v1.9 Draft，不自动合并、不更改线上前端开关。
