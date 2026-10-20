@@ -10,4 +10,15 @@ return [
     'frontend_origin' => 'https://nav.example.com',
     'app_key' => 'REPLACE_WITH_AT_LEAST_64_RANDOM_HEX_CHARACTERS',
     'require_https' => true,
+    // Disabled until SMTP is verified, rate limiting and end-to-end browser testing pass.
+    'password_reset_enabled' => false,
+    'smtp' => [
+        'host' => 'smtp.example.com',
+        'port' => 465,
+        'tls' => 'smtps', // or 'starttls' with port 587. TLS must never be optional.
+        'username' => 'noreply@example.com',
+        'password' => 'REPLACE_IN_PRIVATE_CONFIG_ONLY',
+        'from' => 'noreply@example.com',
+        // 'ca_file' => '/path/to/private/trusted-ca.pem', // optional; default system CA trust
+    ],
 ];
