@@ -4,10 +4,15 @@ declare(strict_types=1);
 if (getenv('CI') !== 'true') exit(2);
 require_once dirname(__DIR__) . '/src/bootstrap.php';
 require_once dirname(__DIR__) . '/scripts/preflight-upgrade.php';
+require_once dirname(__DIR__) . '/src/sql-migrations.php';
 $cfg=nav_config();
 if (!str_contains($cfg['db_dsn'], 'dbname=nav_ci;'))
     throw new RuntimeException('Not the isolated CI database');
 $name='nav_preflight_stage_ci';
+$probe=nav_migration_statements("-- this comment has a semicolon; remain safe\nCREATE TABLE fixture_probe(id INT);");
+if (count($probe)!==1 || !str_starts_with($probe[0],'CREATE TABLE'))
+    throw new RuntimeException('SQL comment parser regression');
+fwrite(STDOUT,"PASS migration parser: comments cannot split SQL statements.\n");
 $root=nav_db();
 $root->exec('CREATE DATABASE `'.$name.'` CHARACTER SET utf8mb4');
 $db=new PDO('mysql:host=127.0.0.1;port=3306;dbname='.$name.';charset=utf8mb4',
@@ -20,7 +25,7 @@ $db->exec("SET time_zone = '+00:00'");
 function applySql(PDO $db, string $path): void {
     $sql=file_get_contents($path);
     if ($sql===false) throw new RuntimeException('Missing fixture migration');
-    foreach (explode(';',$sql) as $statement)
+    foreach (nav_migration_statements($sql) as $statement)
         if (trim($statement)!=='') $db->exec($statement);
 }
 function checkStage(PDO $db, string $state, ?int $completed=null): void {
