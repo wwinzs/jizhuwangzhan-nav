@@ -60,6 +60,15 @@
         if(!loggedIn){status=401;data={error:'Not authenticated'};}
         else if(revokeRequest.confirm!==true){status=400;data={error:'Explicit confirmation required'};}
         else {data={ok:true,revoked_count:liveSessions-1};liveSessions=1;}
+      } else if(route==='password-reset/request'){
+        data={ok:true,message:'If this address is eligible, a reset email may arrive.'};
+        status=202;
+      } else if(route==='password-reset/confirm'){
+        var resetArgs=JSON.parse(opts.body);
+        if(resetArgs.token==='f'.repeat(64)){
+          savedPassword=resetArgs.new_password;loggedIn=false;
+          data={ok:true,reauth_required:true};
+        }else{status=400;data={error:'Invalid or expired reset link'};}
       } else if(route==='auth/logout'){loggedIn=false;data={ok:true};}
       else {status=404;data={error:'Not found'};}
       return Promise.resolve({
@@ -148,6 +157,46 @@
     ok(!el('accountSignedOut').hidden,'logout returns to sign-in form');
     ok(el('accountMessage').textContent.includes('不会被删除'),'logout preserves local navigation');
     ok(localStorage.getItem(key)===existingData,'logout does not modify saved local data');
+    ok(el('accountForgotForm').hidden,'recovery request form initially closed');
+    el('accountForgotToggle').click();
+    ok(!el('accountForgotForm').hidden,'forgot password form can open');
+    el('accountResetEmail').value='unknown@example.com';
+    el('accountForgotForm').dispatchEvent(new Event('submit',{bubbles:true,cancelable:true}));
+    await sleep();
+    ok(el('accountMessage').textContent.includes('如该邮箱符合'),'recovery request remains enumeration-safe');
+    var requestCall=requests.find(function(r){return String(r.url).endsWith('/auth/password-reset/request');});
+    ok(!!requestCall&&requestCall.options.method==='POST'&&requestCall.options.credentials==='include',
+       'reset request is credentialed and originated from authorized UI');
+    ok(el('accountResetEmail').value==='','request does not retain email');
+    el('accountForgotCancel').click();
+    ok(el('accountForgotForm').hidden,'forgot form cancel works');
+    frame.contentWindow.location.hash='password-reset='+'f'.repeat(64);
+    frame.contentWindow.NavAuth.initialize({enabled:true,testMode:true,apiBase:'http://127.0.0.1:8766'});
+    await sleep();
+    ok(frame.contentWindow.location.hash==='','reset fragment removed before request');
+    ok(!el('accountResetForm').hidden,'valid reset link exposes confirmation form');
+    var attempts=requests.length;
+    el('accountResetNewPassword').value='a fully different long password 54321!';
+    el('accountResetConfirmPassword').value='incorrect confirmation';
+    el('accountResetForm').dispatchEvent(new Event('submit',{bubbles:true,cancelable:true}));
+    await sleep();
+    ok(requests.length===attempts,'password mismatch never sends reset token');
+    el('accountResetConfirmPassword').value='a fully different long password 54321!';
+    el('accountResetForm').dispatchEvent(new Event('submit',{bubbles:true,cancelable:true}));
+    await sleep();
+    ok(el('accountResetForm').hidden,'confirmation form hides on successful reset');
+    ok(el('accountResetNewPassword').value===''&&el('accountResetConfirmPassword').value==='',
+       'reset password inputs are cleared');
+    ok(el('accountMessage').textContent.includes('已重置'),'user sees successful recovery status');
+    var confirmCall=requests.find(function(r){return String(r.url).endsWith('/auth/password-reset/confirm');});
+    ok(!!confirmCall&&JSON.parse(confirmCall.options.body).token==='f'.repeat(64),
+       'reset fragment is sent only within credentialed JSON request');
+    ok(localStorage.getItem(key)===existingData,'password recovery preserves local navigation');
+    el('accountPassword').value='a fully different long password 54321!';
+    el('accountLoginForm').dispatchEvent(new Event('submit',{bubbles:true,cancelable:true}));
+    await sleep();
+    ok(!el('accountSignedIn').hidden,'can log in with recovered password');
+    el('accountLogout').click();await sleep();
     rejectNetwork=true;
     await frame.contentWindow.NavAuth.refresh();
     ok(el('accountMessage').textContent.includes('无法连接账号服务'),'network unavailable gives offline fallback');
