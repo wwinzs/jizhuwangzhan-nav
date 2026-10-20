@@ -244,3 +244,94 @@ function nav_recover_owner_password(PDO $db, string $email, string $newPassword)
         throw $error;
     }
 }
+
+/**
+ * Server-internal foundation for a future VERIFIED email recovery channel.
+ * DO NOT connect to a public route until verified SMTP transport, enumeration-safe
+ * response, rate limits, and delivery-failure rollback have been implemented.
+ * A raw token is returned only to its caller and must never be logged/persisted.
+ */
+function nav_issue_password_reset_token(PDO $db, string $email): ?string {
+    $normalized = nav_email($email);
+    if ($normalized === null) return null;
+    $token = bin2hex(random_bytes(32));
+    $hash = hash_hmac('sha256', $token, nav_config()['app_key']);
+    $db->beginTransaction();
+    try {
+        $stmt = $db->prepare("SELECT id FROM nav_users
+            WHERE email=? AND role='owner' AND status='active' LIMIT 1 FOR UPDATE");
+        $stmt->execute([$normalized]);
+        $userId = $stmt->fetchColumn();
+        if ($userId === false) {
+            $db->rollBack();
+            return null;
+        }
+        // At most one unconsumed grant per owner, even under concurrent issuance.
+        $db->prepare("UPDATE nav_password_reset_tokens
+            SET consumed_at=UTC_TIMESTAMP(6)
+            WHERE user_id=? AND consumed_at IS NULL")->execute([$userId]);
+        $db->prepare("INSERT INTO nav_password_reset_tokens
+            (user_id,token_hash,expires_at)
+            VALUES (?,?,UTC_TIMESTAMP(6) + INTERVAL 15 MINUTE)")
+            ->execute([$userId,$hash]);
+        $db->commit();
+        return $token;
+    } catch (Throwable $error) {
+        if ($db->inTransaction()) $db->rollBack();
+        throw $error;
+    }
+}
+
+/**
+ * Accept a single grant exactly once. Reset password + revoke sessions
+ * + consume outstanding grants + security audit all in one transaction.
+ * The 64-char raw token is not a bearer session cookie and must not be logged.
+ */
+function nav_redeem_password_reset_token(PDO $db, string $token, string $newPassword): bool {
+    if (!preg_match('/^[a-f0-9]{64}$/D', $token)
+        || strlen($newPassword) < 14 || strlen($newPassword) > 1024)
+        return false;
+    $hash = hash_hmac('sha256', $token, nav_config()['app_key']);
+    $db->beginTransaction();
+    try {
+        // Non-locking read only discovers user ID; subsequent checks are locked.
+        $stmt = $db->prepare("SELECT user_id FROM nav_password_reset_tokens WHERE token_hash=? LIMIT 1");
+        $stmt->execute([$hash]);
+        $userId = $stmt->fetchColumn();
+        if ($userId === false) {
+            $db->rollBack();
+            return false;
+        }
+        $owner = $db->prepare("SELECT id FROM nav_users
+            WHERE id=? AND role='owner' AND status='active' LIMIT 1 FOR UPDATE");
+        $owner->execute([$userId]);
+        if ($owner->fetchColumn() === false) {
+            $db->rollBack();
+            return false;
+        }
+        $grant = $db->prepare("SELECT id FROM nav_password_reset_tokens
+            WHERE token_hash=? AND user_id=? AND consumed_at IS NULL
+              AND expires_at>UTC_TIMESTAMP(6) LIMIT 1 FOR UPDATE");
+        $grant->execute([$hash,$userId]);
+        if ($grant->fetchColumn() === false) {
+            $db->rollBack();
+            return false;
+        }
+
+        $newHash = password_hash($newPassword, PASSWORD_ARGON2ID, [
+            'memory_cost'=>65536, 'time_cost'=>3, 'threads'=>1,
+        ]);
+        $db->prepare("UPDATE nav_users SET password_hash=? WHERE id=?")
+            ->execute([$newHash,$userId]);
+        $db->prepare("UPDATE nav_sessions SET revoked_at=UTC_TIMESTAMP(6)
+            WHERE user_id=? AND revoked_at IS NULL")->execute([$userId]);
+        $db->prepare("UPDATE nav_password_reset_tokens SET consumed_at=UTC_TIMESTAMP(6)
+            WHERE user_id=? AND consumed_at IS NULL")->execute([$userId]);
+        nav_audit($db,(int)$userId,'password_reset');
+        $db->commit();
+        return true;
+    } catch (Throwable $error) {
+        if ($db->inTransaction()) $db->rollBack();
+        throw $error;
+    }
+}
