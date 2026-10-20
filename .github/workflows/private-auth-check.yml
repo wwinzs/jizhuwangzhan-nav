@@ -66,6 +66,9 @@ jobs:
             echo "::error::Second owner account unexpectedly created"
             exit 1
           fi
+      - name: Isolated CI database backup restore
+        run: |
+          bash server/tests/backup-restore-ci.sh
       - name: Read-only staged migration preflight (isolated MySQL database)
         run: |
           set -eu
@@ -93,6 +96,7 @@ jobs:
           set -eu
           php -S 127.0.0.1:8767 -t server/public server/public/index.php >/tmp/nav-auth-http.log 2>&1 &
           curl --fail --retry 15 --retry-delay 1 --retry-connrefused http://127.0.0.1:8767/health
+          bash server/scripts/check-edge-readonly.sh --ci-loopback
           API=http://127.0.0.1:8767
           ORIGIN=http://127.0.0.1:8766
           # CORS preflight and browser-facing response headers (CI loopback HTTP only).
