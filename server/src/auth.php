@@ -146,37 +146,61 @@ function nav_logout(PDO $db): void {
  * The caller must authenticate the session, require a trusted Origin,
  * validate the new password length and enforce an attempt limit.
  */
-function nav_change_password(PDO $db, int $userId, string $currentPassword, string $newPassword): string {
-    $stmt = $db->prepare("SELECT password_hash FROM nav_users WHERE id=? AND status='active' LIMIT 1");
-    $stmt->execute([$userId]);
-    $oldHash = $stmt->fetchColumn();
-    if (!is_string($oldHash) || !password_verify($currentPassword, $oldHash))
-        return 'invalid';
-    if (hash_equals($currentPassword, $newPassword))
-        return 'same';
-
-    $newHash = password_hash($newPassword, PASSWORD_ARGON2ID, [
-        'memory_cost' => 65536, 'time_cost' => 3, 'threads' => 1,
-    ]);
+/**
+ * Session-aware password change. For public HTTP callers, validate the bearer
+ * INSIDE the same owner-row transaction as the password replacement, so a
+ * logout or password reset cannot authorize a later stale mutation.
+ * Internal CI/CLI callers may omit expectedToken and rely on their own trust.
+ */
+function nav_change_password(PDO $db, int $userId, string $currentPassword,
+    string $newPassword, ?string $expectedToken = null): string {
     $db->beginTransaction();
     try {
-        // Compare-and-swap ensures a concurrent password change cannot be overwritten.
-        $update = $db->prepare(
-            "UPDATE nav_users SET password_hash=? WHERE id=? AND password_hash=? AND status='active'"
-        );
-        $update->execute([$newHash, $userId, $oldHash]);
-        if ($update->rowCount() !== 1) {
+        $stmt = $db->prepare("SELECT password_hash FROM nav_users
+            WHERE id=? AND role='owner' AND status='active' LIMIT 1 FOR UPDATE");
+        $stmt->execute([$userId]);
+        $oldHash = $stmt->fetchColumn();
+        if (!is_string($oldHash)) {
+            $db->rollBack();
+            return 'invalid';
+        }
+        if ($expectedToken !== null) {
+            if (!preg_match('/^[a-f0-9]{64}$/D', $expectedToken)) {
+                $db->rollBack();
+                return 'unauthenticated';
+            }
+            $caller=$db->prepare("SELECT id FROM nav_sessions
+                WHERE user_id=? AND token_hash=? AND revoked_at IS NULL
+                  AND expires_at>UTC_TIMESTAMP(6) LIMIT 1 FOR UPDATE");
+            $caller->execute([$userId,hash('sha256',$expectedToken)]);
+            if ($caller->fetchColumn()===false) {
+                $db->rollBack();
+                return 'unauthenticated';
+            }
+        }
+        if (!password_verify($currentPassword,$oldHash)) {
+            $db->rollBack();
+            return 'invalid';
+        }
+        if (hash_equals($currentPassword,$newPassword)) {
+            $db->rollBack();
+            return 'same';
+        }
+        $newHash=password_hash($newPassword,PASSWORD_ARGON2ID,[
+            'memory_cost'=>65536,'time_cost'=>3,'threads'=>1,
+        ]);
+        $update=$db->prepare("UPDATE nav_users SET password_hash=?
+            WHERE id=? AND password_hash=? AND role='owner' AND status='active'");
+        $update->execute([$newHash,$userId,$oldHash]);
+        if ($update->rowCount()!==1) {
             $db->rollBack();
             return 'conflict';
         }
-
-        $revoke = $db->prepare(
-            "UPDATE nav_sessions SET revoked_at=UTC_TIMESTAMP(6) WHERE user_id=? AND revoked_at IS NULL"
-        );
-        $revoke->execute([$userId]);
+        $db->prepare("UPDATE nav_sessions SET revoked_at=UTC_TIMESTAMP(6)
+            WHERE user_id=? AND revoked_at IS NULL")->execute([$userId]);
         $db->prepare("UPDATE nav_password_reset_tokens SET consumed_at=UTC_TIMESTAMP(6)
             WHERE user_id=? AND consumed_at IS NULL")->execute([$userId]);
-        nav_audit($db, $userId, 'password_changed');
+        nav_audit($db,$userId,'password_changed');
         $db->commit();
         return 'changed';
     } catch (Throwable $error) {
