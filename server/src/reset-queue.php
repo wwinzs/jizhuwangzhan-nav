@@ -30,6 +30,10 @@ function nav_enqueue_reset_mail(PDO $db, string $email): void {
     if ($cipher === false || strlen($tag) !== 16)
         throw new RuntimeException('Unable to seal recipient');
     $recipientHash = hash_hmac('sha256', $normalized, $key);
+    // v1.9.4: bound queue size before admitting more encrypted jobs.
+    // Never branch on account existence. The caller receives a generic response.
+    $backlog = (int)$db->query("SELECT COUNT(*) FROM nav_reset_mail_queue")->fetchColumn();
+    if ($backlog >= 50) return;
     // Same work for existing and unknown emails: no synchronous owner lookup or SMTP.
     $sql = "INSERT INTO nav_reset_mail_queue
         (recipient_hash,recipient_cipher,nonce,auth_tag)
@@ -72,9 +76,10 @@ function nav_claim_reset_mail(PDO $db): ?array {
     }
 }
 
-function nav_finish_reset_mail(PDO $db, int $id, bool $retry): void {
+function nav_finish_reset_mail(PDO $db, int $id, int $claimAttempt, bool $retry): void {
     if (!$retry) {
-        $db->prepare("DELETE FROM nav_reset_mail_queue WHERE id=?")->execute([$id]);
+        $db->prepare("DELETE FROM nav_reset_mail_queue WHERE id=? AND state='processing' AND attempts=?")
+            ->execute([$id,$claimAttempt]);
         return;
     }
     // A short bounded exponential backoff: 2min, 10min; then give up on third attempt.
@@ -82,7 +87,8 @@ function nav_finish_reset_mail(PDO $db, int $id, bool $retry): void {
        SET state='pending',lease_until=NULL,
            available_at=UTC_TIMESTAMP(6) + INTERVAL
              (CASE WHEN attempts=1 THEN 2 ELSE 10 END) MINUTE
-       WHERE id=? AND state='processing'")->execute([$id]);
+       WHERE id=? AND state='processing' AND attempts=?")
+       ->execute([$id,$claimAttempt]);
 }
 
 /**
@@ -119,6 +125,6 @@ function nav_process_reset_mail(PDO $db): bool {
             }
         }
     }
-    nav_finish_reset_mail($db,$id,$retry);
+    nav_finish_reset_mail($db,$id,$attempt,$retry);
     return true;
 }
