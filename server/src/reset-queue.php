@@ -56,8 +56,10 @@ function nav_claim_reset_mail(PDO $db): ?array {
     try {
         $stmt = $db->query("SELECT id,recipient_hash,recipient_cipher,nonce,auth_tag,attempts
             FROM nav_reset_mail_queue
-            WHERE (state='pending' AND available_at<=UTC_TIMESTAMP(6))
-               OR (state='processing' AND lease_until<UTC_TIMESTAMP(6))
+            WHERE created_at>UTC_TIMESTAMP(6) - INTERVAL 15 MINUTE
+              AND attempts<3
+              AND ((state='pending' AND available_at<=UTC_TIMESTAMP(6))
+                OR (state='processing' AND lease_until<UTC_TIMESTAMP(6)))
             ORDER BY id ASC LIMIT 1 FOR UPDATE SKIP LOCKED");
         $job = $stmt->fetch();
         if (!$job) {
@@ -96,6 +98,11 @@ function nav_finish_reset_mail(PDO $db, int $id, int $claimAttempt, bool $retry)
  * Returns false only when no job is ready. No logs include addresses or tokens.
  */
 function nav_process_reset_mail(PDO $db): bool {
+    // v1.9.5: prune jobs whose 15-minute recovery window has elapsed.
+    // Do not send new reset links for requests that have already gone stale.
+    $db->exec("DELETE FROM nav_reset_mail_queue
+        WHERE created_at<=UTC_TIMESTAMP(6) - INTERVAL 15 MINUTE
+           OR attempts>=3");
     $job = nav_claim_reset_mail($db);
     if ($job === null) return false;
     $id = (int)$job['id'];
