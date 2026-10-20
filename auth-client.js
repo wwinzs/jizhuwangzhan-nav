@@ -375,7 +375,13 @@
     $('accountSessionsToggle').addEventListener('click',function () {toggleSessionsPanel(false);});
     $('accountRevokeOthers').addEventListener('click',revokeOtherSessions);
     window.NavAuth = { initialize:initialize, refresh:refresh };
-    initialize({ enabled:false });
+    // Independent, explicitly reviewed static-site release switches.
+    // Undefined/malformed values fail closed; backend remains authoritative.
+    var flags = window.NavAccountFlags || {};
+    initialize({
+      enabled:flags.loginEnabled === true,
+      passwordRecoveryEnabled:flags.passwordRecoveryEnabled === true
+    });
   }
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded',bind,{once:true});
   else bind();
