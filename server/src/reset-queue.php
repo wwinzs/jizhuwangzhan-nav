@@ -30,15 +30,24 @@ function nav_enqueue_reset_mail(PDO $db, string $email): void {
     if ($cipher === false || strlen($tag) !== 16)
         throw new RuntimeException('Unable to seal recipient');
     $recipientHash = hash_hmac('sha256', $normalized, $key);
-    // v1.9.4: bound queue size before admitting more encrypted jobs.
-    // Never branch on account existence. The caller receives a generic response.
-    $backlog = (int)$db->query("SELECT COUNT(*) FROM nav_reset_mail_queue")->fetchColumn();
-    if ($backlog >= 50) return;
-    // Same work for existing and unknown emails: no synchronous owner lookup or SMTP.
-    $sql = "INSERT INTO nav_reset_mail_queue
-        (recipient_hash,recipient_cipher,nonce,auth_tag)
-        VALUES (?,?,?,?)";
-    $db->prepare($sql)->execute([$recipientHash,$cipher,$nonce,$tag]);
+    // Serialize admission across PHP-FPM processes. A count-then-insert without
+    // this lock can exceed the bound when several requests arrive concurrently.
+    // 64-char MySQL advisory lock names: scope with app key, not user email.
+    $lockName = 'nav:reset:' . substr(hash('sha256', nav_config()['app_key']), 0, 40);
+    $lock = $db->prepare('SELECT GET_LOCK(?, 2)');
+    $lock->execute([$lockName]);
+    if ((int)$lock->fetchColumn() !== 1) return; // Generic HTTP response.
+    try {
+        $backlog = (int)$db->query("SELECT COUNT(*) FROM nav_reset_mail_queue")->fetchColumn();
+        if ($backlog >= 50) return;
+        // Same work for existing and unknown emails: no owner lookup or SMTP.
+        $sql = "INSERT INTO nav_reset_mail_queue
+            (recipient_hash,recipient_cipher,nonce,auth_tag)
+            VALUES (?,?,?,?)";
+        $db->prepare($sql)->execute([$recipientHash,$cipher,$nonce,$tag]);
+    } finally {
+        $db->prepare('SELECT RELEASE_LOCK(?)')->execute([$lockName]);
+    }
 }
 
 function nav_open_reset_recipient(array $job): ?string {
