@@ -12,8 +12,12 @@ expectQueue(nav_reset_queue_ready(),'authenticated encryption available');
 $db->exec('DELETE FROM nav_reset_mail_queue');
 nav_enqueue_reset_mail($db,'owner@example.com');
 nav_enqueue_reset_mail($db,'other@example.com');
+nav_enqueue_reset_mail($db,'OWNER@EXAMPLE.COM');
+nav_enqueue_reset_mail($db,'other@example.com');
 $rows=$db->query('SELECT * FROM nav_reset_mail_queue ORDER BY id')->fetchAll();
 expectQueue(count($rows)===2,'known and unknown recipients queued identically');
+expectQueue((int)$db->query('SELECT COUNT(*) FROM nav_reset_mail_queue')->fetchColumn()===2,
+    'duplicate recipients are suppressed while pending');
 expectQueue(!str_contains($rows[0]['recipient_cipher'],'owner@example.com'),
     'no plaintext address in queue');
 expectQueue(strlen($rows[0]['nonce'])===12 && strlen($rows[0]['auth_tag'])===16,
