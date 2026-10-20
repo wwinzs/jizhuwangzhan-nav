@@ -23,6 +23,7 @@ if (!function_exists('stream_isatty') || !stream_isatty(STDIN)) {
     exit(1);
 }
 
+require_once dirname(__DIR__) . '/src/sql-migrations.php';
 $server = dirname(__DIR__);
 $configFile = $server . '/config.local.php';
 $schemaFile = $server . '/schema.sql';
@@ -102,26 +103,26 @@ try {
     // state for inspection rather than blindly dropping any table.
     $sql = file_get_contents($schemaFile);
     if (!is_string($sql) || $sql === '') throw new RuntimeException('缺少数据库建表文件 schema.sql。');
-    foreach (explode(';', $sql) as $statement) {
+    foreach (nav_migration_statements($sql) as $statement) {
         if (trim($statement) !== '') $pdo->exec($statement);
     }
     $auditSql = file_get_contents($migrationFile);
     if (!is_string($auditSql) || trim($auditSql) === '')
         throw new RuntimeException('缺少账号安全审计迁移文件。');
-    foreach (explode(';', $auditSql) as $statement) {
+    foreach (nav_migration_statements($auditSql) as $statement) {
         if (trim($statement) !== '') $pdo->exec($statement);
     }
     $resetSql = file_get_contents($resetMigrationFile);
     if (!is_string($resetSql) || trim($resetSql) === '')
         throw new RuntimeException('缺少一次性密码恢复迁移文件。');
-    foreach (explode(';', $resetSql) as $statement) {
+    foreach (nav_migration_statements($resetSql) as $statement) {
         if (trim($statement) !== '') $pdo->exec($statement);
     }
 
     $queueSql = file_get_contents($queueMigrationFile);
     if (!is_string($queueSql) || trim($queueSql) === '')
         throw new RuntimeException('缺少异步重置邮件队列迁移文件。');
-    foreach (explode(';', $queueSql) as $statement) {
+    foreach (nav_migration_statements($queueSql) as $statement) {
         if (trim($statement) !== '') $pdo->exec($statement);
     }
 
