@@ -16,6 +16,7 @@ jobs:
         run: |
           node --check app.js
           node --check auth-client.js
+          node --check account-flags.js
       - name: Required assets
         run: |
           test -s index.html
@@ -27,6 +28,8 @@ jobs:
           test -s data.css
           test -s auth.css
           test -s auth-client.js
+          test -s account-flags.js
+          test -s RELEASE_V1930_RC.md
           test -s tests/auth-ui-smoke.html
           test -s tests/data-smoke.html
           test -s tests/mainland-smoke.html
@@ -50,6 +53,7 @@ jobs:
           grep -q 'data.css' index.html
           grep -q 'auth.css' index.html
           grep -q 'auth-client.js' index.html
+          grep -q 'account-flags.js' index.html
           grep -q 'favicon.svg' index.html
           ! grep -q 'images.unsplash.com' desktop.css
           ! grep -q 'images.unsplash.com' personalize.css
