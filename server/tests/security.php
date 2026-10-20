@@ -44,7 +44,7 @@ foreach ([
     }
 }
 check(true,'userinfo, path, query, fragment and trailing garbage origins refused');
-foreach ([str_repeat('a',64).'evil',str_repeat('a',64)."\n",str_repeat('a',63)] as $key) {
+foreach ([str_repeat('a',65),str_repeat('a',64).'evil',str_repeat('a',64)."\n",str_repeat('a',63)] as $key) {
     $bad=$valid;$bad['app_key']=$key;
     try {nav_validate_config($bad);throw new RuntimeException('Accepted bad app key');}
     catch (RuntimeException $e) {
