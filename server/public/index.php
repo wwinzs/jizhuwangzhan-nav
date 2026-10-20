@@ -138,7 +138,9 @@ try {
         $key = nav_limit_key('password-change', (string)$user['id']);
         if (!nav_limit_try($db, $key, 8))
             nav_reply(429, ['error'=>'Too many attempts']);
-        $result = nav_change_password($db, (int)$user['id'], $current, $next);
+        $result = nav_change_password($db, (int)$user['id'], $current, $next,
+            is_string($_COOKIE['__Host-nav_session'] ?? null) ? $_COOKIE['__Host-nav_session'] : '');
+        if ($result === 'unauthenticated') nav_reply(401, ['error'=>'Not authenticated']);
         if ($result === 'invalid') nav_reply(401, ['error'=>'Invalid current password']);
         if ($result === 'same') nav_reply(400, ['error'=>'New password must differ']);
         if ($result === 'conflict') nav_reply(409, ['error'=>'Password changed in another session']);
