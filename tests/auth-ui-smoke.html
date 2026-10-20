@@ -16,6 +16,10 @@
     });
     await sleep();
     ok(!!frame.contentWindow.NavAuth,'auth client loaded');
+    ok(frame.contentWindow.NavAccountFlags &&
+      frame.contentWindow.NavAccountFlags.loginEnabled===false &&
+      frame.contentWindow.NavAccountFlags.passwordRecoveryEnabled===false,
+      'production login and recovery flags fail closed independently');
     ok(el('accountButton').hidden,'account entry disabled until deployment');
     ok(!el('accountDialog').open,'account dialog closed initially');
     ok(el('tiles').querySelectorAll('.tile').length>0,'existing local homepage still renders');
