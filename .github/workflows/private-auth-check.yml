@@ -257,3 +257,8 @@ jobs:
           assert '15 分钟' in body
           print('TLS mail captured, addressed and MIME-decoded with test-only token')
           PY
+          openssl req -x509 -newkey rsa:2048 -nodes -days 1 \
+            -keyout /tmp/nav-unknown-key.pem -out /tmp/nav-unknown-cert.pem \
+            -subj '/CN=localhost' >/dev/null 2>&1
+          sed -i 's@/tmp/nav-smtp-cert.pem@/tmp/nav-unknown-cert.pem@' server/config.local.php
+          php server/tests/smtp-reject-untrusted.php
