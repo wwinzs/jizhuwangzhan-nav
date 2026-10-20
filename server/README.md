@@ -7,18 +7,18 @@
 - 密码使用 PHP Argon2id 散列，登录返回通用失败信息；按 IP 与邮箱做 15 分钟窗口的登录限流。
 - 会话使用 256 位随机令牌，数据库只存 SHA-256 散列；Cookie 采用 HttpOnly、Secure、SameSite=Strict、Host-only (__Host-)。
 - 登录和退出要求 **精确匹配 frontend_origin 的 Origin**，拒绝跨站表单提交和其他来源。配置文件存于 public/ 外。
-- 计划使用正式域名 `https://nav.wwinzs.cn` 与 `https://api-nav.wwinzs.cn`；详见 `docs/DOMAIN_AND_AUTH_ROLLOUT.md`。目前 GitHub Pages 的 github.io 地址和自建 API 域名不保证能正常发送 Strict Cookie。
+- 计划使用正式域名 `https://nav.wwinzs.cn` 与 `https://api-nav.wwinzs.cn`，**两个域名均部署在中国大陆腾讯云 VPS 的独立 Nginx 虚拟主机**，GitHub Pages 继续用于不带登录的预览；详见 `docs/DOMAIN_AND_AUTH_ROLLOUT.md`。跨源会话只在正式同站点 HTTPS 域名验收，`github.io` 预览页不能作为替代。
 - 后台不能以项目源码目录作为文档根目录，必须将站点根目录指向 server/public/；禁止直接暴露 config.local.php 或 SQL 文件。
 
 ## 服务器准备（待正式部署前执行）
-1. 安装 PHP 8.2+（pdo_mysql、openssl、mbstring）、MySQL 8.0+，创建独立数据库和最低权限的应用账号。
-2. 将 server/ 文件夹上传到站点工作目录之外，网站根目录**仅**指向 server/public/。PHP-FPM 必须能读取 server/config.local.php。
+1. **先确认 ICP 备案及腾讯云接入备案状态**，仅在正式允许对外提供网站服务后进行 DNS 发布。检查现有 VPS 资源和站点配置，不覆盖旧网站。需要时安装 PHP 8.2+（pdo_mysql、openssl、mbstring）和 MySQL 8.0+，创建独立数据库和最低权限的应用账号。
+2. 将 server/ 放置在 API 独立站点目录中，**Web 文档根仅**指向 server/public/，而 server/config.local.php、server/schema.sql 位于 Web 根之外；PHP-FPM 必须能读取受限配置。导航静态前端另建独立站点 `nav.wwinzs.cn`。
 3. 复制 server/config.local.example.php 为 server/config.local.php；填入真实数据库配置、前端 HTTPS Origin，并运行 `php -r 'echo bin2hex(random_bytes(32)), PHP_EOL;'` 生成 app_key。
 4. 创建数据表：`mysql -u nav_only -p jizhu_nav < server/schema.sql`（部署时应用数据库账号需被授予建表权限，之后可收紧）。
 5. 在服务器交互终端执行 `php server/scripts/create-owner.php owner@example.com`，输入两次至少 14 字节的强密码（终端不回显）。
 6. 后续用HTTPS测试 `GET /health`、`POST /auth/login`、`GET /auth/me` 和 `POST /auth/logout`。登入 JSON 示例：
    `{"email":"owner@example.com","password":"你的密码"}`。
-   POST 必须带准确的 `Origin: https://nav.example.com` 和 `Content-Type: application/json`。
+   POST 必须带准确的 `Origin: https://nav.wwinzs.cn` 和 `Content-Type: application/json`。
 
 ## 当前接口
 | 路径 | 方法 | 作用 |
