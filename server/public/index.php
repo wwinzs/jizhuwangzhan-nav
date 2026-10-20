@@ -48,9 +48,8 @@ try {
         $body = nav_json_body();
         if (!is_string($body['email'] ?? null) || !is_string($body['password'] ?? null))
             nav_reply(400, ['error'=>'Email and password required']);
-        $user = nav_authenticate(nav_db(), $body['email'], $body['password'], $_SERVER['REMOTE_ADDR'] ?? 'unknown');
+        $user = nav_login(nav_db(), $body['email'], $body['password'], $_SERVER['REMOTE_ADDR'] ?? 'unknown');
         if (!$user) nav_reply(401, ['error'=>'Invalid credentials']);
-        nav_create_session(nav_db(), (int)$user['id']);
         nav_reply(200, ['user'=>$user]);
     }
     if ($path === '/auth/sessions' && $method === 'GET') {
