@@ -124,6 +124,27 @@ jobs:
           test "$CODE" = 401
           bash server/tests/session-management-http.sh "$API" "$ORIGIN"
           bash server/tests/password-change-http.sh "$API" "$ORIGIN"
+          # Seed old rows, run the CLI-only bounded cleanup and prove active rows survive.
+          MYSQL_PWD=integration_only_password mysql -h 127.0.0.1 -u root nav_ci <<'SQL'
+          INSERT INTO nav_sessions(user_id,token_hash,expires_at)
+            SELECT id, REPEAT('e',64), UTC_TIMESTAMP(6) - INTERVAL 1 DAY
+            FROM nav_users WHERE email='owner@example.com';
+          INSERT INTO nav_sessions(user_id,token_hash,expires_at,revoked_at)
+            SELECT id, REPEAT('d',64), UTC_TIMESTAMP(6) + INTERVAL 1 DAY,
+              UTC_TIMESTAMP(6) - INTERVAL 31 DAY
+            FROM nav_users WHERE email='owner@example.com';
+          INSERT INTO nav_login_limits(key_hash,attempts,window_start)
+            VALUES (REPEAT('c',64),3,UTC_TIMESTAMP(6) - INTERVAL 2 DAY);
+          INSERT INTO nav_login_limits(key_hash,attempts,window_start)
+            VALUES (REPEAT('b',64),1,UTC_TIMESTAMP(6));
+          SQL
+          php server/scripts/cleanup-sessions.php
+          test "$(MYSQL_PWD=integration_only_password mysql -N -h 127.0.0.1 -u root nav_ci \
+            -e "SELECT COUNT(*) FROM nav_sessions WHERE token_hash IN(REPEAT('e',64),REPEAT('d',64))")" = 0
+          test "$(MYSQL_PWD=integration_only_password mysql -N -h 127.0.0.1 -u root nav_ci \
+            -e "SELECT COUNT(*) FROM nav_login_limits WHERE key_hash=REPEAT('c',64)")" = 0
+          test "$(MYSQL_PWD=integration_only_password mysql -N -h 127.0.0.1 -u root nav_ci \
+            -e "SELECT COUNT(*) FROM nav_login_limits WHERE key_hash=REPEAT('b',64)")" = 1
           for i in $(seq 1 12); do
             CODE=$(curl -sS -o /tmp/auth-body -w '%{http_code}' -H "Origin: $ORIGIN" -H 'Content-Type: application/json' -d '{"email":"owner@example.com","password":"wrong"}' "$API/auth/login")
           done
