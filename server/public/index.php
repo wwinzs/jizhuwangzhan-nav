@@ -51,6 +51,28 @@ try {
         nav_create_session(nav_db(), (int)$user['id']);
         nav_reply(200, ['user'=>$user]);
     }
+    if ($path === '/auth/change-password' && $method === 'POST') {
+        nav_require_origin();
+        $db = nav_db();
+        $user = nav_session_user($db);
+        if (!$user) nav_reply(401, ['error'=>'Not authenticated']);
+        $body = nav_json_body();
+        $current = $body['current_password'] ?? null;
+        $next = $body['new_password'] ?? null;
+        if (!is_string($current) || !is_string($next))
+            nav_reply(400, ['error'=>'Current and new password required']);
+        if (strlen($current)>1024 || strlen($next)<14 || strlen($next)>1024)
+            nav_reply(400, ['error'=>'Invalid password length']);
+        $key = nav_limit_key('password-change', (string)$user['id']);
+        if (!nav_limit_try($db, $key, 8))
+            nav_reply(429, ['error'=>'Too many attempts']);
+        $result = nav_change_password($db, (int)$user['id'], $current, $next);
+        if ($result === 'invalid') nav_reply(401, ['error'=>'Invalid current password']);
+        if ($result === 'same') nav_reply(400, ['error'=>'New password must differ']);
+        if ($result === 'conflict') nav_reply(409, ['error'=>'Password changed in another session']);
+        nav_cookie('', time()-3600);
+        nav_reply(200, ['ok'=>true, 'reauth_required'=>true]);
+    }
     if ($path === '/auth/logout' && $method === 'POST') {
         nav_require_origin();
         nav_logout(nav_db());
