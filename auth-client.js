@@ -4,7 +4,7 @@
   var API_BASE = 'https://api-nav.wwinzs.cn';
   var AUTH_HOSTNAME = 'nav.wwinzs.cn';
   var enabled = false, busy = false, user = null, otherSessionCount = 0;
-  var resetToken = null, forgotVisible = false;
+  var resetToken = null, forgotVisible = false, recoveryAvailable = false;
   var $ = function (id) { return document.getElementById(id); };
 
   function setMessage(message, isError) {
@@ -32,7 +32,7 @@
     $('accountForgotCancel').disabled = busy;
     $('accountResetSubmit').disabled = busy;
     $('accountResetCancel').disabled = busy;
-    $('accountForgotToggle').hidden = !!user || !!resetToken;
+    $('accountForgotToggle').hidden = !recoveryAvailable || !!user || !!resetToken;
     $('accountForgotToggle').setAttribute('aria-expanded', String(forgotVisible));
     $('accountForgotForm').hidden = !!user || !!resetToken || !forgotVisible;
     $('accountResetForm').hidden = !!user || !resetToken;
@@ -338,12 +338,13 @@
     // Tests may supply testMode in their isolated same-origin browser fixture.
     if (options.testMode === true && location.hostname === '127.0.0.1') allowedHost = true;
     enabled = allowedHost && options.enabled === true;
+    recoveryAvailable = enabled && options.passwordRecoveryEnabled === true;
     API_BASE = options.testMode === true && location.hostname === '127.0.0.1'
       ? (options.apiBase || API_BASE) : 'https://api-nav.wwinzs.cn';
     readResetFragment();
     $('accountButton').hidden = !enabled;
     if (!enabled) {user=null;forgotVisible=false;paint();return;}
-    if (resetToken) {
+    if (resetToken && recoveryAvailable) {
       user = null;
       paint();
       if (!$('accountDialog').open) $('accountDialog').showModal();
