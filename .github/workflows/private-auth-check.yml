@@ -40,6 +40,7 @@ jobs:
           done
           php server/tests/security.php
           bash -n server/tests/password-change-http.sh
+          bash -n server/tests/session-management-http.sh
       - name: Initialize isolated MySQL test environment
         run: |
           set -eu
@@ -121,6 +122,7 @@ jobs:
           test "$CODE" = 200
           CODE=$(curl -sS -o /tmp/auth-body -w '%{http_code}' -b "__Host-nav_session=$TOKEN" "$API/auth/me")
           test "$CODE" = 401
+          bash server/tests/session-management-http.sh "$API" "$ORIGIN"
           bash server/tests/password-change-http.sh "$API" "$ORIGIN"
           for i in $(seq 1 12); do
             CODE=$(curl -sS -o /tmp/auth-body -w '%{http_code}' -H "Origin: $ORIGIN" -H 'Content-Type: application/json' -d '{"email":"owner@example.com","password":"wrong"}' "$API/auth/login")
