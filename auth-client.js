@@ -346,7 +346,7 @@
     if (resetToken) {
       user = null;
       paint();
-      $('accountDialog').showModal();
+      if (!$('accountDialog').open) $('accountDialog').showModal();
       $('accountResetNewPassword').focus();
     } else {
       paint();refresh();
