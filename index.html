@@ -90,6 +90,20 @@
       <div id="accountSignedIn" hidden>
         <p class="account-explain">已登录为 <strong id="accountIdentity"></strong></p>
         <p class="account-local-note">账号已验证；本地收藏尚未上传，也不会在登录或退出时被清空。</p>
+        <button id="accountChangePasswordToggle" class="ghost" type="button" aria-expanded="false" aria-controls="accountChangePasswordForm">修改登录密码</button>
+        <form id="accountChangePasswordForm" class="account-form account-security-form" hidden>
+          <p class="account-local-note">修改密码后，所有设备的原登录会话都会失效，需要重新登录。本地收藏不会受到影响。</p>
+          <label for="accountCurrentPassword">当前密码</label>
+          <input id="accountCurrentPassword" type="password" required maxlength="1024" autocomplete="current-password">
+          <label for="accountNewPassword">新密码（14–1024 字节）</label>
+          <input id="accountNewPassword" type="password" required maxlength="1024" autocomplete="new-password">
+          <label for="accountConfirmPassword">确认新密码</label>
+          <input id="accountConfirmPassword" type="password" required maxlength="1024" autocomplete="new-password">
+          <div class="account-security-actions">
+            <button id="accountChangePasswordSubmit" type="submit" class="primary-btn">确认修改密码</button>
+            <button id="accountChangePasswordCancel" type="button" class="ghost">取消</button>
+          </div>
+        </form>
         <button id="accountLogout" class="ghost" type="button">退出账号</button>
       </div>
       <p id="accountMessage" class="account-message" role="status" aria-live="polite"></p>
