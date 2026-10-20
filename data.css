@@ -22,3 +22,13 @@ html[data-theme=light] .storage-meter.storage-heavy{
   .data-actions .ghost,.data-actions .upload-btn{display:flex;justify-content:center;text-align:center}
   .storage-meter{font-size:11px}
 }
+
+/* v1.8.1: no-remote-icons default and explicit direct-site opt-in */
+.favicon-policy-label{display:grid;gap:7px;font-size:12px;color:#dce6f6;margin-top:12px}
+.favicon-policy-label select{padding:11px 12px;border-radius:10px;color:#fff;border:1px solid #ffffff40;background:#ffffff16;max-width:100%}
+.favicon-policy-label select option{color:#273d57}
+.tile-icon .favicon-letter,.tile-icon .favicon-img{grid-area:1/1;}
+.tile-icon .favicon-img:not(.custom-favicon){opacity:0;transition:opacity .12s ease}
+.tile-icon.has-favicon .favicon-img{opacity:1}
+html[data-theme=light] .favicon-policy-label{color:#334d6b}
+html[data-theme=light] .favicon-policy-label select{background:white;color:#203853;border-color:#bdcce0}

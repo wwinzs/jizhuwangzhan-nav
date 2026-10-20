@@ -29,6 +29,8 @@ jobs:
           test -s auth-client.js
           test -s tests/auth-ui-smoke.html
           test -s tests/data-smoke.html
+          test -s tests/mainland-smoke.html
+          for art in aurora dusk ocean forest night; do test -s "assets/wallpapers/$art.svg"; done
           test -s tests/personalize-smoke.html
           test -s tests/ui-smoke.html
           test -s tests/stability-smoke.html
@@ -49,6 +51,9 @@ jobs:
           grep -q 'auth.css' index.html
           grep -q 'auth-client.js' index.html
           grep -q 'favicon.svg' index.html
+          ! grep -q 'images.unsplash.com' desktop.css
+          ! grep -q 'images.unsplash.com' personalize.css
+          ! grep -q 'google.com/s2/favicons' app.js
       - name: Desktop stylesheet guard
         run: |
           node - <<'NODE'
@@ -147,6 +152,14 @@ jobs:
             exit 1
           fi
           grep -oE 'PASS [0-9]+ checks' /tmp/nav-data-result.html | head -1
+          "$BROWSER" --headless --no-sandbox --disable-gpu --disable-dev-shm-usage --virtual-time-budget=15000 --dump-dom http://127.0.0.1:8766/tests/mainland-smoke.html > /tmp/nav-mainland-result.html 2>/tmp/nav-mainland-chrome.log
+          if ! grep -q 'data-test-status="PASS"' /tmp/nav-mainland-result.html; then
+            echo "::error::Mainland asset and favicon policy regression failed"
+            grep -oE 'FAIL [^<]+' /tmp/nav-mainland-result.html || true
+            tail -25 /tmp/nav-mainland-chrome.log || true
+            exit 1
+          fi
+          grep -oE 'PASS [0-9]+ checks' /tmp/nav-mainland-result.html | head -1
           "$BROWSER" --headless --no-sandbox --disable-gpu --disable-dev-shm-usage --virtual-time-budget=10000 --dump-dom http://127.0.0.1:8766/tests/auth-ui-smoke.html > /tmp/nav-auth-ui-result.html 2>/tmp/nav-auth-ui-chrome.log
           if ! grep -q 'data-test-status="PASS"' /tmp/nav-auth-ui-result.html; then
             echo "::error::Private account frontend or offline fallback regression failed"

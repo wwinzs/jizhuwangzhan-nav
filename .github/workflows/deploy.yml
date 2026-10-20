@@ -29,6 +29,9 @@ jobs:
         run: |
           mkdir dist
           cp index.html app.js auth-client.js style.css desktop.css minimal.css layout.css personalize.css data.css auth.css favicon.svg dist/
+          mkdir -p dist/assets/wallpapers
+          cp assets/wallpapers/*.svg dist/assets/wallpapers/
+          test "$(find dist/assets/wallpapers -maxdepth 1 -name '*.svg' | wc -l)" -eq 5
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with:
