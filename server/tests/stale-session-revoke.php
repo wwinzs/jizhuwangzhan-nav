@@ -35,7 +35,7 @@ try {
         throw new RuntimeException('Valid caller did not revoke another live session');
     $sel->execute([hash('sha256',$b)]);
     if ($sel->fetchColumn()!==null)
-        throw new RuntimeException('Valid caller's own session was revoked');
+        throw new RuntimeException('Valid caller session was incorrectly revoked');
     fwrite(STDOUT,"PASS sessions: revoked bearer denied; active caller retained.\n");
 } finally {
     $db->prepare('DELETE FROM nav_sessions WHERE user_id=? AND id>?')->execute([$id,$max]);
