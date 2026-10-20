@@ -24,7 +24,6 @@ try {
         throw new RuntimeException('Reserved member role granted private login');
     $n=(int)$db->query("SELECT COUNT(*) FROM nav_sessions WHERE user_id=".$memberId)->fetchColumn();
     if ($n!==0) throw new RuntimeException('Member session was created');
-    fwrite(STDOUT,"PASS private auth: reserved member cannot log in.\n");
     // A legacy bcrypt hash must be upgraded inside the locked login txn.
     $db->prepare('UPDATE nav_users SET password_hash=? WHERE id=?')
         ->execute([password_hash($pass,PASSWORD_BCRYPT),$id]);
@@ -40,6 +39,7 @@ try {
     $created=(int)$db->query("SELECT COUNT(*) FROM nav_sessions
         WHERE user_id=".$id." AND id>".$sessionMax)->fetchColumn();
     if ($created!==1) throw new RuntimeException('Exactly one session was not issued');
+    fwrite(STDOUT,"PASS private auth: reserved member cannot log in.\n");
     fwrite(STDOUT,"PASS private auth: legacy hash rehashed and exactly one session issued.\n");
 } finally {
     $db->prepare('DELETE FROM nav_sessions WHERE user_id=? AND id>?')
