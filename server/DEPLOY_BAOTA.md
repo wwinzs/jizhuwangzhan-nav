@@ -53,3 +53,20 @@
 ## 接口
 
 `GET /health`、`POST /auth/login`、`GET /auth/me`、`POST /auth/logout`。登录和退出请求必须带 `Origin: https://nav.wwinzs.cn`。当前仅有站长账号；邮箱找回、SMTP、邀请机制和历史版本未完成。
+
+## VPS 实机验收记录（2026-10-20）
+
+用户通过腾讯云 Debian VPS 的本机 HTTPS `--resolve api-nav.wwinzs.cn:443:127.0.0.1` 执行了不泄露密码的手工闭环测试，反馈结果：
+
+| 检查 | 结果 |
+| --- | --- |
+| 数据库中账号存在且状态 active | 通过 |
+| 输入密码与数据库存储哈希一致 | MATCH |
+| `POST /auth/login` | HTTP 200 |
+| 携带 Cookie 的 `GET /auth/me` | HTTP 200 |
+| `POST /auth/logout` | HTTP 200 |
+| 用退出前保留的 Cookie 再查 `GET /auth/me` | HTTP 401 |
+
+**范围限制**：以上属于用户报告的 VPS 本机 HTTPS 真实接口验收，不等于浏览器端跨域、Cookie、PHP-FPM open_basedir、域名公网访问已通过。此前使用手动输入邮箱及 Python 构造 JSON 的脚本返回过 HTTP 401，后来在固定正确邮箱、一次密码输入、PHP 构造 JSON 的闭环中通过。**尚未证明 Python JSON 编码本身有缺陷**，不要据此改动生产鉴权算法。
+
+**待办**：从导航页原点进行真实浏览器 CORS / Cookie 验证，检查 PHP-FPM 的文件隔离、登录失败策略与站点部署安全，完成审核后再另行开启账号前端开关。保持 v1.9 Draft，不自动合并、不更改线上前端开关。
