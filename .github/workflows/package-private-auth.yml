@@ -21,6 +21,9 @@ jobs:
           for file in server/src/*.php server/public/*.php server/scripts/*.php; do php -l "$file"; done
           bash -n server/scripts/check-auth-baota.sh
           test -s server/DEPLOY_BAOTA.md
+          test -s server/RELEASE_GATES_V19.md
+          test -s server/scripts/preflight-upgrade.php
+          test -s server/scripts/preflight-worker.php
           test -s server/migrations/001_security_events.sql
           test -s server/migrations/002_password_reset_tokens.sql
           test -s server/src/mail.php
@@ -40,6 +43,9 @@ jobs:
           unzip -Z -1 nav-v1.9-api-baota-draft.zip | grep -Fx 'server/scripts/check-reset-mail-queue.php'
           unzip -Z -1 nav-v1.9-api-baota-draft.zip | grep -Fx 'server/scripts/recover-owner.php'
           unzip -Z -1 nav-v1.9-api-baota-draft.zip | grep -Fx 'server/scripts/check-auth-baota.sh'
+          unzip -Z -1 nav-v1.9-api-baota-draft.zip | grep -Fx 'server/scripts/preflight-upgrade.php'
+          unzip -Z -1 nav-v1.9-api-baota-draft.zip | grep -Fx 'server/scripts/preflight-worker.php'
+          unzip -Z -1 nav-v1.9-api-baota-draft.zip | grep -Fx 'server/RELEASE_GATES_V19.md'
           ! unzip -Z -1 nav-v1.9-api-baota-draft.zip | grep -Eq '(^|/)config\.local\.php$'
       - uses: actions/upload-artifact@v4
         with:
