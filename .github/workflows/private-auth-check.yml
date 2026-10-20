@@ -126,6 +126,33 @@ jobs:
           bash server/tests/session-management-http.sh "$API" "$ORIGIN"
           bash server/tests/password-change-http.sh "$API" "$ORIGIN"
           php server/tests/audit-recovery.php
+          # Owner-only audit endpoint: trusted origin and valid session required.
+          CODE=$(curl -sS -o /tmp/nav-audit -w '%{http_code}' \
+            -H "Origin: $ORIGIN" "$API/auth/security-events")
+          test "$CODE" = 401
+          CODE=$(curl -sS -D /tmp/nav-recover-headers -o /tmp/nav-audit \
+            -w '%{http_code}' -H "Origin: $ORIGIN" \
+            -H 'Content-Type: application/json' \
+            --data '{"email":"owner@example.com","password":"a very long CI password 987654!"}' \
+            "$API/auth/login")
+          test "$CODE" = 200
+          RECOVERY_TOKEN=$(sed -n -E 's/^[Ss]et-[Cc]ookie: __Host-nav_session=([a-f0-9]{64});.*$/\1/p' /tmp/nav-recover-headers | head -1)
+          test "${#RECOVERY_TOKEN}" -eq 64
+          CODE=$(curl -sS -o /tmp/nav-audit -w '%{http_code}' \
+            -b "__Host-nav_session=$RECOVERY_TOKEN" \
+            -H 'Origin: https://untrusted.example' "$API/auth/security-events")
+          test "$CODE" = 403
+          CODE=$(curl -sS -o /tmp/nav-audit -w '%{http_code}' \
+            -b "__Host-nav_session=$RECOVERY_TOKEN" \
+            -H "Origin: $ORIGIN" "$API/auth/security-events")
+          test "$CODE" = 200
+          python3 - <<'PY'
+          import json
+          events=json.load(open('/tmp/nav-audit',encoding='utf-8'))['events']
+          assert events and len(events)<=30
+          assert all(set(e)=={'event_type','created_at'} for e in events)
+          assert 'owner_recovery' in [e['event_type'] for e in events]
+          PY
           # Seed old rows, run the CLI-only bounded cleanup and prove active rows survive.
           MYSQL_PWD=integration_only_password mysql -h 127.0.0.1 -u root nav_ci <<'SQL'
           INSERT INTO nav_sessions(user_id,token_hash,expires_at)
