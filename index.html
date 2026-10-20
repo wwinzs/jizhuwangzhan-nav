@@ -104,6 +104,13 @@
             <button id="accountChangePasswordCancel" type="button" class="ghost">取消</button>
           </div>
         </form>
+        <button id="accountSessionsToggle" class="ghost" type="button" aria-expanded="false" aria-controls="accountSessionsPanel">管理登录会话</button>
+        <section id="accountSessionsPanel" class="account-session-panel" hidden aria-label="登录会话">
+          <p class="account-local-note">仅显示会话创建时间和到期时间，不采集设备名称、IP 或浏览器指纹。最多显示最近 50 条。</p>
+          <p id="accountSessionsStatus" class="account-local-note" role="status"></p>
+          <ul id="accountSessionsList" class="account-session-list"></ul>
+          <button id="accountRevokeOthers" type="button" class="ghost" disabled>退出其他登录会话</button>
+        </section>
         <button id="accountLogout" class="ghost" type="button">退出账号</button>
       </div>
       <p id="accountMessage" class="account-message" role="status" aria-live="polite"></p>
