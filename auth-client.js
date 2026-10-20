@@ -342,7 +342,7 @@
       ? (options.apiBase || API_BASE) : 'https://api-nav.wwinzs.cn';
     readResetFragment();
     $('accountButton').hidden = !enabled;
-    if (!enabled) {user=null;resetToken=null;forgotVisible=false;paint();return;}
+    if (!enabled) {user=null;forgotVisible=false;paint();return;}
     if (resetToken) {
       user = null;
       paint();
