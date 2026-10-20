@@ -348,6 +348,9 @@ jobs:
           test ! -e /tmp/nav-smtp-captured.eml
           test "$(MYSQL_PWD=integration_only_password mysql -N -h 127.0.0.1 -u root nav_ci \
             -e "SELECT COUNT(*) FROM nav_reset_mail_queue")" = 2
+          # CI must isolate previous password-reset tests from SMTP delivery tests.
+          test "$(MYSQL_PWD=integration_only_password mysql -N -h 127.0.0.1 -u root nav_ci \
+            -e "SELECT COUNT(*) FROM nav_password_reset_tokens WHERE consumed_at IS NULL AND expires_at>UTC_TIMESTAMP(6)")" = 0
           php server/scripts/process-reset-mail.php
           test -s /tmp/nav-smtp-captured.eml
           test "$(MYSQL_PWD=integration_only_password mysql -N -h 127.0.0.1 -u root nav_ci \
