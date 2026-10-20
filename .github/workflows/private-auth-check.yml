@@ -116,6 +116,10 @@ jobs:
           ! grep -Eiq '^Access-Control-Allow-Origin:' /tmp/nav-cors-foreign
           echo 'CORS preflight, allowed origin and rejected origin regressions passed'
           LOGIN='{"email":"owner@example.com","password":"a very long CI password 987654!"}'
+          CODE=$(curl -sS -o /tmp/auth-body -w '%{http_code}' \
+            -H "Origin: $ORIGIN" -H 'Content-Type: application/json-bogus' \
+            --data "$LOGIN" "$API/auth/login")
+          test "$CODE" = 415
           CODE=$(curl -sS -o /tmp/auth-body -w '%{http_code}' -H 'Content-Type: application/json' -d "$LOGIN" "$API/auth/login")
           test "$CODE" = 403
           CODE=$(curl -sS -o /tmp/auth-body -w '%{http_code}' -H "Origin: $ORIGIN" -H 'Content-Type: application/json' -d '{"email":"owner@example.com","password":"wrong"}' "$API/auth/login")
