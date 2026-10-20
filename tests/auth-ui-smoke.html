@@ -157,6 +157,11 @@
     ok(!el('accountSignedOut').hidden,'logout returns to sign-in form');
     ok(el('accountMessage').textContent.includes('不会被删除'),'logout preserves local navigation');
     ok(localStorage.getItem(key)===existingData,'logout does not modify saved local data');
+    ok(el('accountForgotToggle').hidden,'recovery is disabled independently by default');
+    frame.contentWindow.NavAuth.initialize({enabled:true,testMode:true,
+      apiBase:'http://127.0.0.1:8766',passwordRecoveryEnabled:true});
+    await sleep();
+    ok(!el('accountForgotToggle').hidden,'recovery must be explicitly enabled');
     ok(el('accountForgotForm').hidden,'recovery request form initially closed');
     el('accountForgotToggle').click();
     ok(!el('accountForgotForm').hidden,'forgot password form can open');
@@ -171,7 +176,7 @@
     el('accountForgotCancel').click();
     ok(el('accountForgotForm').hidden,'forgot form cancel works');
     frame.contentWindow.location.hash='password-reset='+'f'.repeat(64);
-    frame.contentWindow.NavAuth.initialize({enabled:true,testMode:true,apiBase:'http://127.0.0.1:8766'});
+    frame.contentWindow.NavAuth.initialize({enabled:true,testMode:true,apiBase:'http://127.0.0.1:8766',passwordRecoveryEnabled:true});
     await sleep();
     ok(frame.contentWindow.location.hash==='','reset fragment removed before request');
     ok(!el('accountResetForm').hidden,'valid reset link exposes confirmation form');
