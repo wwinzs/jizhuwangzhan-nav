@@ -148,6 +148,8 @@ function nav_change_password(PDO $db, int $userId, string $currentPassword, stri
             "UPDATE nav_sessions SET revoked_at=UTC_TIMESTAMP(6) WHERE user_id=? AND revoked_at IS NULL"
         );
         $revoke->execute([$userId]);
+        $db->prepare("UPDATE nav_password_reset_tokens SET consumed_at=UTC_TIMESTAMP(6)
+            WHERE user_id=? AND consumed_at IS NULL")->execute([$userId]);
         nav_audit($db, $userId, 'password_changed');
         $db->commit();
         return 'changed';
@@ -236,6 +238,8 @@ function nav_recover_owner_password(PDO $db, string $email, string $newPassword)
             ->execute([$newHash,$id]);
         $db->prepare('UPDATE nav_sessions SET revoked_at=UTC_TIMESTAMP(6)
             WHERE user_id=? AND revoked_at IS NULL')->execute([$id]);
+        $db->prepare("UPDATE nav_password_reset_tokens SET consumed_at=UTC_TIMESTAMP(6)
+            WHERE user_id=? AND consumed_at IS NULL")->execute([$id]);
         nav_audit($db, $id, 'owner_recovery');
         $db->commit();
         return true;
