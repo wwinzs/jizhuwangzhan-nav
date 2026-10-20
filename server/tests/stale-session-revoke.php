@@ -10,12 +10,13 @@ $id=(int)$db->query("SELECT id FROM nav_users WHERE email='owner@example.com' AN
 if (!$id) throw new RuntimeException('Missing CI owner');
 $max=(int)$db->query('SELECT COALESCE(MAX(id),0) FROM nav_sessions')->fetchColumn();
 $old=$_COOKIE['__Host-nav_session'] ?? null;
-$a=bin2hex(random_bytes(32));$b=bin2hex(random_bytes(32));
+$a=bin2hex(random_bytes(32));$b=bin2hex(random_bytes(32));$c=bin2hex(random_bytes(32));
 try {
     $ins=$db->prepare("INSERT INTO nav_sessions(user_id,token_hash,expires_at)
         VALUES (?,?,UTC_TIMESTAMP(6) + INTERVAL 1 DAY)");
     $ins->execute([$id,hash('sha256',$a)]);
     $ins->execute([$id,hash('sha256',$b)]);
+    $ins->execute([$id,hash('sha256',$c)]);
     // This simulates a reset revoking a caller after initial HTTP auth.
     $db->prepare("UPDATE nav_sessions SET revoked_at=UTC_TIMESTAMP(6)
         WHERE user_id=? AND token_hash=?")->execute([$id,hash('sha256',$a)]);
@@ -29,6 +30,9 @@ try {
     $_COOKIE['__Host-nav_session']=$b;
     if (nav_revoke_other_sessions($db,$id)<1)
         throw new RuntimeException('Valid caller failed to revoke other sessions');
+    $sel->execute([hash('sha256',$c)]);
+    if ($sel->fetchColumn()===null)
+        throw new RuntimeException('Valid caller did not revoke another live session');
     $sel->execute([hash('sha256',$b)]);
     if ($sel->fetchColumn()!==null)
         throw new RuntimeException('Valid caller's own session was revoked');
