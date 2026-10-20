@@ -44,12 +44,21 @@ try {
     );
     $resetDelete->execute();
 
+    // Remove stuck/stale queue items only after 24 hours, in a bounded batch.
+    $queueDelete = $db->prepare(
+        "DELETE FROM nav_reset_mail_queue
+         WHERE created_at < UTC_TIMESTAMP(6) - INTERVAL 1 DAY
+         ORDER BY id LIMIT 500"
+    );
+    $queueDelete->execute();
+
     fwrite(STDOUT, sprintf(
         "Maintenance complete: removed %d expired/stale sessions, %d expired rate-limit entries, %d old security events, %d stale reset grants.\n",
         $sessionDelete->rowCount(),
         $limitDelete->rowCount(),
         $auditDelete->rowCount(),
-        $resetDelete->rowCount()
+        $resetDelete->rowCount(),
+        $queueDelete->rowCount()
     ));
 } catch (Throwable $error) {
     // Avoid logging credentials, DSNs or SQL driver exception details.
