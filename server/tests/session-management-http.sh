@@ -68,7 +68,11 @@ code=$(curl -sS -o "$tmp/body" -w '%{http_code}' \
 [[ "$code" == 200 ]]
 code=$(curl -sS -o "$tmp/body" -w '%{http_code}' \
   -b "__Host-nav_session=$t3" -H "Origin: $origin" \
-  -H 'Content-Type: application/json' --data '{}' "$api/auth/sessions/revoke-others")
+  -H 'Content-Type: application/json' --data '{"confirm":false}' "$api/auth/sessions/revoke-others")
+[[ "$code" == 400 ]]
+code=$(curl -sS -o "$tmp/body" -w '%{http_code}' \
+  -b "__Host-nav_session=$t3" -H "Origin: $origin" \
+  -H 'Content-Type: application/json' --data '{"confirm":true}' "$api/auth/sessions/revoke-others")
 [[ "$code" == 200 ]]
 python3 - "$tmp/body" <<'PY'
 import json,sys
