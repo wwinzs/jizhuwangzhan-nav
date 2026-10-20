@@ -14,7 +14,7 @@
 ## 操作
 
 1. 在宝塔创建并记下新数据库名、数据库专用用户名、密码（不要发给聊天助手或提交 Git）。
-2. 从 GitHub CI 的对应审核提交取得 `nav-v1.9-api-baota-draft.zip`，上传到 `/www/wwwroot/api-nav.wwinzs.cn/`。**仅能使用通过 CI 并经过核查的包**；包内必须有 `server/public/index.php`、`server/src/`、`server/scripts/install-baota.php`、`server/schema.sql`、`server/migrations/001_security_events.sql`、`server/migrations/002_password_reset_tokens.sql`；绝不能包含真实 `config.local.php`。
+2. 从 GitHub CI 的对应审核提交取得 `nav-v1.9-api-baota-draft.zip`，上传到 `/www/wwwroot/api-nav.wwinzs.cn/`。**仅能使用通过 CI 并经过核查的包**；包内必须有 `server/public/index.php`、`server/src/`、`server/scripts/install-baota.php`、`server/schema.sql`、`server/migrations/001_security_events.sql`、`server/migrations/002_password_reset_tokens.sql`、`server/migrations/003_async_reset_mail.sql`；绝不能包含真实 `config.local.php`。
 3. SSH（root）执行：
    ```bash
    set -e
@@ -90,10 +90,10 @@
 **v1.9.1–v1.9.3 更新：** 新增 `003_async_reset_mail.sql`，开发分支全新安装现为 **7 张表**；已有数据库应在备份恢复验证后，顺序审查 `001_security_events.sql`、`002_password_reset_tokens.sql`、`003_async_reset_mail.sql`，不得重新安装，不得对现有表执行初始化 schema。只有 SMTP、邮件地址所有权、worker 权限和队列积压监控都通过验收，才可显式启用 `password_reset_enabled` 并在生产系统配置 CLI worker。首次上线前绝不能只打开网页开关而未部署/监控 worker。
 
 
-**更新：新版开发分支还包含 `002_password_reset_tokens.sql`，因此全新安装为 7 张表；旧库必须依次独立审查与执行 `001`、`002` 两个迁移，而非重装。密码重置的公网申请和确认端点仍然不存在，邮件服务尚未配置。**
+**最新状态：开发分支具备找回密码的双开关网页/API，但正式服务器没有部署、没有配置真实 SMTP 也没有 worker 定时器；务必按 001、002、003 三项迁移顺序审核，旧库不能重装。**
 
-此前已运行的 VPS 账号数据库有 **4 张表**。新的 Draft 安全审计和重置令牌功能需要第 5、6 张表 `nav_security_events`；绝对不要对现有数据库再次执行 `install-baota.php`，也不要重复执行 `server/schema.sql`。
+此前已运行的 VPS 账号数据库有 **4 张表**。新的 Draft 安全审计、重置令牌及异步队列分别需要第 5、6、7 张表；绝对不要对现有数据库再次执行 `install-baota.php`，也不要重复执行 `server/schema.sql`。
 
-升级顺序：先获取 API 站点与独立数据库的可验证备份，明确专属库名和用户，再人工审阅 `server/migrations/001_security_events.sql`，检查新表名是否冲突和建表权限。在**原有独立账号数据库**上按顺序执行这三项增量 SQL；核验原有四张表、站长账号及会话均未变化，确认新增三表存在，之后才安排后端代码更新。任何失败须保留现场，不要自行删除表或重装；正式前端登录开关仍关闭。
+升级顺序：先获取 API 站点与独立数据库的可验证备份，明确专属库名和用户，再人工审阅 `server/migrations/001_security_events.sql`、`002_password_reset_tokens.sql`、`003_async_reset_mail.sql`，检查新表名是否冲突和建表权限。在**原有独立账号数据库**上按顺序执行这三项增量 SQL；核验原有四张表、站长账号及会话均未变化，确认新增三表存在，之后才安排后端代码更新。任何失败须保留现场，不要自行删除表或重装；正式前端登录开关仍关闭。
 
 此版本补充了仅 root/配置文件属主可用的 `server/scripts/recover-owner.php`，但**不要求部署时立即运行**；只有站长确实遗忘密码，并在核验数据库迁移和备份后，才在交互式 SSH 终端中按提示执行。代码没有 SMTP、邮件确认或公网找回入口。不要将真实密码、Cookie、数据库 DSN 或配置发送到聊天。
