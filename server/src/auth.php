@@ -144,7 +144,8 @@ function nav_revoke_other_sessions(PDO $db, int $userId): int {
     if (!is_string($token) || !preg_match('/^[0-9a-f]{64}$/', $token)) return 0;
     $stmt = $db->prepare(
         "UPDATE nav_sessions SET revoked_at=UTC_TIMESTAMP(6)
-         WHERE user_id=? AND token_hash<>? AND revoked_at IS NULL"
+         WHERE user_id=? AND token_hash<>? AND revoked_at IS NULL
+           AND expires_at>UTC_TIMESTAMP(6)"
     );
     $stmt->execute([$userId, hash('sha256', $token)]);
     return $stmt->rowCount();
