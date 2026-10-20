@@ -78,6 +78,7 @@ jobs:
           set -eu
           php server/tests/login-password-race.php
           php server/tests/owner-login-role.php
+          php server/tests/rate-limit-boundary.php
       - name: GCM reset queue privacy and lease tests
         run: |
           set -eu
