@@ -106,3 +106,46 @@ function nav_change_password(PDO $db, int $userId, string $currentPassword, stri
         throw $error;
     }
 }
+
+/**
+ * Return a capped, privacy-minimal view of a user's live sessions.
+ * Never expose raw or hashed bearer tokens, IP addresses or User-Agent data.
+ */
+function nav_active_sessions(PDO $db, int $userId): array {
+    $token = $_COOKIE['__Host-nav_session'] ?? '';
+    if (!is_string($token) || !preg_match('/^[0-9a-f]{64}$/', $token)) return [];
+    $hash = hash('sha256', $token);
+    $stmt = $db->prepare("SELECT
+            DATE_FORMAT(created_at,'%Y-%m-%dT%H:%i:%sZ') AS created_at,
+            DATE_FORMAT(expires_at,'%Y-%m-%dT%H:%i:%sZ') AS expires_at,
+            (token_hash = ?) AS is_current
+        FROM nav_sessions
+        WHERE user_id=? AND revoked_at IS NULL AND expires_at>UTC_TIMESTAMP(6)
+        ORDER BY (token_hash = ?) DESC, created_at DESC, id DESC
+        LIMIT 50");
+    $stmt->execute([$hash, $userId, $hash]);
+    $result = [];
+    foreach ($stmt->fetchAll() as $row) {
+        $result[] = [
+            'created_at' => $row['created_at'],
+            'expires_at' => $row['expires_at'],
+            'current' => (bool)$row['is_current'],
+        ];
+    }
+    return $result;
+}
+
+/**
+ * End other sessions while retaining the authenticated caller's session.
+ * Authentication and trusted Origin checks belong to the HTTP route.
+ */
+function nav_revoke_other_sessions(PDO $db, int $userId): int {
+    $token = $_COOKIE['__Host-nav_session'] ?? '';
+    if (!is_string($token) || !preg_match('/^[0-9a-f]{64}$/', $token)) return 0;
+    $stmt = $db->prepare(
+        "UPDATE nav_sessions SET revoked_at=UTC_TIMESTAMP(6)
+         WHERE user_id=? AND token_hash<>? AND revoked_at IS NULL"
+    );
+    $stmt->execute([$userId, hash('sha256', $token)]);
+    return $stmt->rowCount();
+}
