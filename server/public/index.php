@@ -151,7 +151,9 @@ try {
         nav_reply(200, ['ok'=>true]);
     }
     nav_reply(404, ['error'=>'Not found']);
-} catch (Throwable $error) {
-    error_log('nav backend request failed: '.$error->getMessage());
+} catch (Throwable) {
+    // Some PDO/SMTP exceptions can contain connection details or email addresses.
+    // Never forward attacker-influenced exception messages to shared webserver logs.
+    error_log('nav backend request failed; inspect protected runtime diagnostics');
     nav_reply(500, ['error'=>'Internal server error']);
 }
