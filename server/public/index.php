@@ -51,6 +51,22 @@ try {
         nav_create_session(nav_db(), (int)$user['id']);
         nav_reply(200, ['user'=>$user]);
     }
+    if ($path === '/auth/sessions' && $method === 'GET') {
+        nav_require_origin();
+        $db = nav_db();
+        $user = nav_session_user($db);
+        if (!$user) nav_reply(401, ['error'=>'Not authenticated']);
+        nav_reply(200, ['sessions'=>nav_active_sessions($db, (int)$user['id'])]);
+    }
+    if ($path === '/auth/sessions/revoke-others' && $method === 'POST') {
+        nav_require_origin();
+        $db = nav_db();
+        $user = nav_session_user($db);
+        if (!$user) nav_reply(401, ['error'=>'Not authenticated']);
+        nav_json_body();
+        $count = nav_revoke_other_sessions($db, (int)$user['id']);
+        nav_reply(200, ['ok'=>true, 'revoked_count'=>$count]);
+    }
     if ($path === '/auth/change-password' && $method === 'POST') {
         nav_require_origin();
         $db = nav_db();
