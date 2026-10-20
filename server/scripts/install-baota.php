@@ -28,6 +28,7 @@ $configFile = $server . '/config.local.php';
 $schemaFile = $server . '/schema.sql';
 $migrationFile = $server . '/migrations/001_security_events.sql';
 $resetMigrationFile = $server . '/migrations/002_password_reset_tokens.sql';
+$queueMigrationFile = $server . '/migrations/003_async_reset_mail.sql';
 $public = $server . '/public';
 $expectedPublic = '/www/wwwroot/api-nav.wwinzs.cn/server/public';
 umask(0077);
@@ -48,7 +49,7 @@ try {
     if (!is_dir($public) || realpath($public) !== $expectedPublic) {
         throw new RuntimeException('安装目录不正确，预期目录：' . $expectedPublic);
     }
-    if (!is_file($schemaFile) || !is_file($migrationFile) || !is_file($resetMigrationFile) || !is_file($public . '/index.php')) {
+    if (!is_file($schemaFile) || !is_file($migrationFile) || !is_file($resetMigrationFile) || !is_file($queueMigrationFile) || !is_file($public . '/index.php')) {
         throw new RuntimeException('后端安装包文件不完整，请检查是否解压成功。');
     }
     if (file_exists($configFile) || is_link($configFile)) {
@@ -117,6 +118,13 @@ try {
         if (trim($statement) !== '') $pdo->exec($statement);
     }
 
+    $queueSql = file_get_contents($queueMigrationFile);
+    if (!is_string($queueSql) || trim($queueSql) === '')
+        throw new RuntimeException('缺少异步重置邮件队列迁移文件。');
+    foreach (explode(';', $queueSql) as $statement) {
+        if (trim($statement) !== '') $pdo->exec($statement);
+    }
+
     $passwordHash = password_hash($ownerPassword, PASSWORD_ARGON2ID, [
         'memory_cost' => 65536, 'time_cost' => 3, 'threads' => 1,
     ]);
@@ -140,11 +148,11 @@ try {
     $tables = (int) $pdo->query(
         "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = DATABASE()"
     )->fetchColumn();
-    if ($tables !== 6) throw new RuntimeException('数据库建表数量不正确。');
+    if ($tables !== 7) throw new RuntimeException('数据库建表数量不正确。');
     if ((int) $pdo->query("SELECT COUNT(*) FROM nav_users WHERE role='owner'")->fetchColumn() !== 1) {
         throw new RuntimeException('站长账号验证失败。');
     }
-    echo "安装成功：已建立 6 张独立数据表、1 个站长账号，配置文件权限为 0600。\n";
+    echo "安装成功：已建立 7 张独立数据表、1 个站长账号，配置文件权限为 0600。\n";
     echo "目前未开启公开注册、云同步，也未启用导航页上的登录入口。\n";
     echo "下一步：验证 https://api-nav.wwinzs.cn/health 和 PHP-FPM 访问限制。\n";
 } catch (Throwable $error) {
