@@ -66,6 +66,10 @@ jobs:
             echo "::error::Second owner account unexpectedly created"
             exit 1
           fi
+      - name: GCM reset queue privacy and lease tests
+        run: |
+          set -eu
+          php server/tests/reset-mail-queue.php
       - name: Live HTTP authentication regression
         run: |
           set -eu
