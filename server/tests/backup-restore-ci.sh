@@ -44,4 +44,4 @@ mysql -h127.0.0.1 -uroot -e 'CREATE DATABASE nav_restore_ci CHARACTER SET utf8mb
 restore_created=1
 mysql -h127.0.0.1 -uroot nav_restore_ci < "$tmp/synthetic-ci-only.sql"
 php server/tests/verify-backup-restore-ci.php
-echo 'PASS CI-only backup restore: source untouched after fixture cleanup'
+echo 'PASS CI-only backup restore: synthetic source fixture and disposable database are cleaned at exit'
