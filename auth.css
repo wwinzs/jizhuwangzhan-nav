@@ -19,6 +19,10 @@
 .account-message{min-height:20px;margin:0;color:#b7e9cf;font-size:12px;line-height:1.6}
 .account-message.account-error{color:#ffc5be}
 #accountLogout{min-height:39px;padding:9px 18px}
+#accountForgotToggle{min-height:35px;margin:8px 0;padding:5px 8px}
+#accountForgotForm,#accountResetForm{margin-top:12px}
+#accountForgotToggle:disabled,#accountForgotSubmit:disabled,#accountForgotCancel:disabled,
+#accountResetSubmit:disabled,#accountResetCancel:disabled{opacity:.52;cursor:wait}
 #accountChangePasswordToggle{min-height:39px;padding:9px 18px;margin:0 10px 10px 0}
 .account-security-form{margin:12px 0 18px;padding:14px;border:1px solid rgba(255,255,255,.16);border-radius:12px;background:rgba(255,255,255,.05)}
 .account-security-form .account-local-note{margin:0 0 5px}
