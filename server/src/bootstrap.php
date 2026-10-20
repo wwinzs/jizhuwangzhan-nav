@@ -1,6 +1,32 @@
 <?php
 declare(strict_types=1);
 
+/**
+ * Validate candidate configuration independently from the per-request cache.
+ * An Origin contains only scheme, host and optional port; credentials, fragments,
+ * URLs with paths and ambiguous trailing garbage are never trusted.
+ */
+function nav_validate_config(array $candidate): array {
+    foreach (['db_dsn','db_user','db_password','frontend_origin','app_key'] as $name) {
+        if (!isset($candidate[$name]) || !is_string($candidate[$name]) || $candidate[$name] === '')
+            throw new RuntimeException('Missing configuration.');
+    }
+    if (!preg_match('/\\A[a-f0-9]{64,}\\z/iD', $candidate['app_key']))
+        throw new RuntimeException('Invalid secret key.');
+    $value = $candidate['frontend_origin'];
+    if (!preg_match('~\\Ahttps?://(?:[a-z0-9.-]+|\\[[0-9a-f:.]+\\])(?::[0-9]{1,5})?\\z~iD', $value))
+        throw new RuntimeException('Invalid frontend origin.');
+    $origin = parse_url($value);
+    if (!$origin || !in_array($origin['scheme'] ?? '', ['https','http'],true)
+        || empty($origin['host']) || isset($origin['user']) || isset($origin['pass'])
+        || isset($origin['path']) || isset($origin['query']) || isset($origin['fragment'])
+        || (isset($origin['port']) && ($origin['port']<1 || $origin['port']>65535)))
+        throw new RuntimeException('Invalid frontend origin.');
+    if (($candidate['require_https'] ?? true) !== false && $origin['scheme'] !== 'https')
+        throw new RuntimeException('HTTPS frontend required.');
+    return $candidate;
+}
+
 function nav_config(): array {
     static $config = null;
     if ($config !== null) return $config;
@@ -8,18 +34,7 @@ function nav_config(): array {
     if (!is_file($path)) throw new RuntimeException('Server is not configured.');
     $candidate = require $path;
     if (!is_array($candidate)) throw new RuntimeException('Invalid server configuration.');
-    foreach (['db_dsn', 'db_user', 'db_password', 'frontend_origin', 'app_key'] as $name) {
-        if (!isset($candidate[$name]) || !is_string($candidate[$name]) || $candidate[$name] === '')
-            throw new RuntimeException('Missing configuration.');
-    }
-    if (!preg_match('/^[a-f0-9]{64,}$/i', $candidate['app_key']))
-        throw new RuntimeException('Invalid secret key.');
-    $origin = parse_url($candidate['frontend_origin']);
-    if (!$origin || !in_array($origin['scheme'] ?? '', ['https','http'], true)
-        || empty($origin['host']) || isset($origin['path']) || isset($origin['query']))
-        throw new RuntimeException('Invalid frontend origin.');
-    if (($candidate['require_https'] ?? true) !== false && $origin['scheme'] !== 'https')
-        throw new RuntimeException('HTTPS frontend required.');
+    $candidate = nav_validate_config($candidate);
     $config = $candidate;
     return $config;
 }
@@ -58,7 +73,7 @@ function nav_require_origin(): void {
 }
 
 function nav_json_body(): array {
-    if (!str_starts_with(strtolower(trim(explode(';', $_SERVER['CONTENT_TYPE'] ?? '')[0])), 'application/json'))
+    if (strtolower(trim(explode(';', $_SERVER['CONTENT_TYPE'] ?? '')[0])) !== 'application/json')
         nav_reply(415, ['error' => 'JSON content type required']);
     if ((int)($_SERVER['CONTENT_LENGTH'] ?? 0)>4096)
         nav_reply(413, ['error' => 'Request too large']);
