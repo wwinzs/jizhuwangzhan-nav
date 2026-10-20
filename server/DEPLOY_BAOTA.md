@@ -33,7 +33,14 @@
    curl --noproxy '*' --resolve api-nav.wwinzs.cn:443:127.0.0.1 \
      -sS -i https://api-nav.wwinzs.cn/health
    ```
-   预期 HTTP 200 JSON `{"status":"ok"}`。完整登录、会话、跨域和 PHP-FPM open_basedir 仍需后续独立验收，不应仅据 /health 成功就启用前端登录入口。
+   预期 HTTP 200 JSON `{"status":"ok"}`；仅凭健康检查成功，不代表登录和跨域验证完成。
+
+5. **仅在 API 已成功安装且 /health 通过后**，从交互式 SSH 终端运行登录闭环检查（不需要重新安装、不修改 Nginx 或其他网站）：
+   ```bash
+   bash /www/wwwroot/api-nav.wwinzs.cn/server/scripts/check-auth-baota.sh
+   ```
+   该脚本读取站长邮箱和不回显的密码，通过本机 HTTPS 完成登录 → 获取账号 → 退出 → 确认旧会话被撤销；Cookie 暂存在权限受限的临时目录，脚本退出时删除。输入密码与 Cookie 不写到屏幕和命令行参数。若当前已安装的旧 ZIP 中没有此脚本，请从本次通过 CI 的版本中单独取出 **`server/scripts/check-auth-baota.sh`** 放在同一路径，**不要为此重新执行安装程序，也不要覆盖生产配置**。
+   注意：此项只验收本机 HTTPS、登录与会话；浏览器端 CORS/Cookie、PHP-FPM open_basedir、真实公网访问仍须分别验证。
 
 ## 失败及回滚
 
