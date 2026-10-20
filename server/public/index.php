@@ -2,6 +2,7 @@
 declare(strict_types=1);
 require_once dirname(__DIR__) . '/src/auth.php';
 require_once dirname(__DIR__) . '/src/mail.php';
+require_once dirname(__DIR__) . '/src/reset-queue.php';
 
 try {
     $config = nav_config();
@@ -94,16 +95,10 @@ try {
         $allowedIp = nav_limit_try($db, nav_limit_key('reset-ip',$ip), 8);
         $allowedMail = nav_limit_try($db, nav_limit_key('reset-email',$normalized), 3);
         if (!$allowedIp || !$allowedMail) nav_reply(429, ['error'=>'Too many requests']);
-        $token = nav_issue_password_reset_token($db,$normalized);
-        if ($token !== null) {
-            try {
-                $delivered = nav_send_reset_mail($normalized,$token);
-            } catch (Throwable) {
-                $delivered = false;
-            }
-            if (!$delivered) nav_discard_password_reset_token($db,$token);
-            unset($token);
-        }
+        // Always enqueue, including unknown accounts. Only the CLI worker
+        // can look up an account and send email after this response completes.
+        if (!nav_reset_queue_ready()) nav_reply(503, ['error'=>'Service unavailable']);
+        nav_enqueue_reset_mail($db,$normalized);
         // Do not indicate if an account exists or if mail was accepted by SMTP.
         nav_reply(202, ['ok'=>true, 'message'=>'If this address is eligible, a reset email may arrive.']);
     }
