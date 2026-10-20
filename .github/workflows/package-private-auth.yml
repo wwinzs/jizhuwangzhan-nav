@@ -22,11 +22,13 @@ jobs:
           bash -n server/scripts/check-auth-baota.sh
           test -s server/DEPLOY_BAOTA.md
           test -s server/migrations/001_security_events.sql
+          test -s server/migrations/002_password_reset_tokens.sql
           test -s server/scripts/recover-owner.php
           test ! -e server/config.local.php
           zip -q -r nav-v1.9-api-baota-draft.zip server -x 'server/tests/*' 'server/runtime/*'
           unzip -tq nav-v1.9-api-baota-draft.zip
           unzip -Z -1 nav-v1.9-api-baota-draft.zip | grep -Fx 'server/migrations/001_security_events.sql'
+          unzip -Z -1 nav-v1.9-api-baota-draft.zip | grep -Fx 'server/migrations/002_password_reset_tokens.sql'
           unzip -Z -1 nav-v1.9-api-baota-draft.zip | grep -Fx 'server/scripts/recover-owner.php'
           unzip -Z -1 nav-v1.9-api-baota-draft.zip | grep -Fx 'server/scripts/check-auth-baota.sh'
           ! unzip -Z -1 nav-v1.9-api-baota-draft.zip | grep -Eq '(^|/)config\.local\.php$'
