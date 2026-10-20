@@ -59,7 +59,7 @@ function nav_login(PDO $db, string $email, string $password, string $ip): ?array
     $db->beginTransaction();
     try {
         $stmt = $db->prepare("SELECT id,email,role,password_hash
-            FROM nav_users WHERE email=? AND status='active'
+            FROM nav_users WHERE email=? AND role='owner' AND status='active'
             LIMIT 1 FOR UPDATE");
         $stmt->execute([$normalized]);
         $user = $stmt->fetch();
