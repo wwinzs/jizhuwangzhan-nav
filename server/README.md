@@ -86,3 +86,12 @@
 - 主动修改密码或由服务器终端恢复密码时，同样废止尚未使用的全部重置令牌。CLI 清理脚本以最多 500 条/批清理过旧失效记录，不影响有效的 15 分钟令牌。
 - **刻意没有**新增 `/auth/password-reset/request`、`/auth/password-reset/confirm` 公网路由；CI 验证其返回 404。此阶段没有发邮件、没有收集 SMTP 凭据、没有更改站长密码。不可通过直接调用内部函数来对外提供找回服务。
 - 公开找回入口上线前必须先选定可验证的发信方式，增加邮箱所有权校验、请求频率限制、账号枚举防护、邮箱发信失败的一致性处理、防泄露重置链接、真实浏览器端端到端测试与安全审查。**本轮 GitHub CI 仅验证令牌内部逻辑，不代表邮件找回已经可用。**
+
+## v1.9 SMTP 安全发信组件（仅 Draft；默认关闭，未接入公网重置入口）
+
+- 新增 `server/src/mail.php`：调用 PHP cURL/libcurl 通过 **SMTPS 465** 或 **强制 STARTTLS 587** 发送纯文本 UTF-8 邮件；校验服务端 TLS 证书与主机名，不允许明文回退、不接受重定向、禁止 cURL verbose、连接最长等待 5 秒/总耗时最长 12 秒。无需额外 Composer 依赖，但运行机器必须安装 PHP `curl` 扩展。
+- 密码、SMTP 授权码和连接设置仅存放在 Web 根目录以外的 `server/config.local.php`；公开示例 `server/config.local.example.php` 提供占位字段，不放真实账号、授权码到 GitHub、CLI 参数或日志。
+- **`password_reset_enabled` 默认是 `false`**。仅当明确设置为布尔 `true` 且 SMTP 配置、cURL 扩展、端口/加密组合全部有效时，邮件发送函数才可执行。注意开启这个标志**不会自动创建网页重置接口**：`/auth/password-reset/request` 和 `/auth/password-reset/confirm` 在当前版本仍为 404。
+- 重置邮件链接形式为 `https://nav.wwinzs.cn/#password-reset=<64位随机令牌>`。片段不会随页面 HTTP 请求发送给 Nginx，但仍会留在浏览器环境中；后续前端实现必须在读取后立即使用 `history.replaceState` 擦除片段，并设置 `Referrer-Policy: no-referrer`，严禁引入第三方分析或将重置令牌写进日志。
+- GitHub CI 使用 localhost 上一次性生成的 TLS 测试证书和模拟 SMTP 收件箱，实际验证认证、邮件上传、编码后的中文正文、正确收件地址与链接格式；也检查对不安全配置的拒绝。**这不是生产邮件提供商的可达性/投递率验收**，尚需另行配置合法发件地址、DNS SPF/DKIM/DMARC，并验证真实投递。
+- 启用公网找回前仍需：先验证站长邮箱所有权；加入对账号枚举、请求频率限制和邮件失败的处理；实现可访问的找回页面、令牌去痕与前后端联调；完成真实用户端接收和安全审核。不要仅为了测试而打开正式站找回开关。
