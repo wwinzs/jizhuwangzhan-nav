@@ -324,7 +324,9 @@ jobs:
           done
           test "$(MYSQL_PWD=integration_only_password mysql -N -h 127.0.0.1 -u root nav_ci \
             -e "SELECT COUNT(*) FROM nav_reset_mail_queue")" = 0
-          for i in 1 2 3; do
+          # The e2e fixture clears preceding login-limit rows before testing
+          # credentials, so exercise all four anonymous email attempts here.
+          for i in 1 2 3 4; do
             CODE=$(curl -sS -o /tmp/nav-reset-limit -w '%{http_code}' \
               -H "Origin: $ORIGIN" -H 'Content-Type: application/json' \
               --data '{"email":"unknown@example.com"}' "$API/auth/password-reset/request")
