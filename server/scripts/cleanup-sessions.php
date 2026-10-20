@@ -34,11 +34,22 @@ try {
     );
     $auditDelete->execute();
 
+    // Expired or consumed grants are never needed beyond 24 hours.
+    // Live unconsumed grants remain usable for their full 15-minute TTL.
+    $resetDelete = $db->prepare(
+        "DELETE FROM nav_password_reset_tokens
+         WHERE expires_at < UTC_TIMESTAMP(6) - INTERVAL 1 DAY
+            OR (consumed_at IS NOT NULL AND consumed_at < UTC_TIMESTAMP(6) - INTERVAL 1 DAY)
+         ORDER BY id LIMIT 500"
+    );
+    $resetDelete->execute();
+
     fwrite(STDOUT, sprintf(
-        "Maintenance complete: removed %d expired/stale sessions, %d expired rate-limit entries, %d old security events.\n",
+        "Maintenance complete: removed %d expired/stale sessions, %d expired rate-limit entries, %d old security events, %d stale reset grants.\n",
         $sessionDelete->rowCount(),
         $limitDelete->rowCount(),
-        $auditDelete->rowCount()
+        $auditDelete->rowCount(),
+        $resetDelete->rowCount()
     ));
 } catch (Throwable $error) {
     // Avoid logging credentials, DSNs or SQL driver exception details.
