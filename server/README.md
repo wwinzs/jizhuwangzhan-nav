@@ -28,6 +28,8 @@
 | /auth/me | GET | 读取当前登录用户的非敏感字段 |
 | /auth/logout | POST | 吊销会话并清除 Cookie |
 | /auth/change-password | POST | 校验当前密码、设置新密码，并撤销该账号所有旧会话（仅开发分支） |
+| /auth/sessions | GET | 读取当前账号最多 50 条有效会话，当前会话优先；不返回 Cookie、IP 或设备信息（仅开发分支） |
+| /auth/sessions/revoke-others | POST | 确认后撤销当前账号的其他有效会话，保留本次登录（仅开发分支） |
 
 ## 完成 v1.9 前仍需实现
 - HTTPS 域名与 PHP-FPM / Nginx 反代的真实环境验收。
@@ -56,3 +58,12 @@
 - CI 使用隔离 MySQL 测试用户验证鉴权、Origin、密码长度、错误旧密码、两个并存旧会话失效及新密码可重新登录。
 - 登录状态下的账号弹窗新增“修改登录密码”表单，前端验证新密码长度和两次输入一致；修改成功后清空输入并切换到重新登录提示。浏览器回归测试覆盖失败提示、表单收起、Cookie 请求及本地收藏不变。**正式站仍关闭账号入口，UI 仅供开发分支回归测试。**
 - 本次不涉及邮箱验证码、找回密码、SMTP、设备管理 UI、云同步及生产服务器部署；即使 GitHub CI 全绿也不能自动开启网页登录。
+
+## 会话管理与安全清理（v1.9 Draft）
+
+- 登录后的账号弹窗增加“管理登录会话”。只显示 UTC 时间戳对应的本地时间及当前/其他会话标记，不记录或推断设备名称、用户 IP、浏览器指纹。列表最多 50 条，当前会话优先。
+- `GET /auth/sessions` 必须携带可信 `Origin` 和有效会话 Cookie，仅查询当前 `user_id`，不返回 token/hash。返回 `{"sessions":[{"created_at":"...Z","expires_at":"...Z","current":true}]}`。
+- `POST /auth/sessions/revoke-others` 必须携带可信 `Origin`、有效会话 Cookie、`Content-Type: application/json` 及 `{"confirm":true}`；`{"confirm":false}` 返回 400。仅撤销该账号的其他有效会话，当前会话不被撤销；此动作要求前端二次确认，无法撤销他人账号的会话。
+- 新增 `php server/scripts/cleanup-sessions.php` **仅 CLI** 清理到期会话、撤销超过 30 日的会话及超过 1 日的登录限流记录。每类最多清理 500 条，避免长时间占用数据库。**本次没有部署/启用定时任务**；上线后应在单独评审与确认运行环境后制定每日维护计划。
+- GitHub CI 使用全新 MySQL 实例验证三份会话并存、非法来源拒绝、明确确认、撤销其他会话、当前会话保留及有效记录未被清理。UI 浏览器测试采用 mock，不代表已通过生产浏览器 Cookie/CORS 实测。
+- 无数据库表结构变动，不要求为此次功能重新安装数据库。**代码暂留 Draft，生产 VPS 尚未更新，不能直接对正式 API 调用这些新增接口。**
