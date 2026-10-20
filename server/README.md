@@ -27,6 +27,7 @@
 | /auth/login | POST | 身份校验、限流、签发安全会话 |
 | /auth/me | GET | 读取当前登录用户的非敏感字段 |
 | /auth/logout | POST | 吊销会话并清除 Cookie |
+| /auth/change-password | POST | 校验当前密码、设置新密码，并撤销该账号所有旧会话（仅开发分支） |
 
 ## 完成 v1.9 前仍需实现
 - HTTPS 域名与 PHP-FPM / Nginx 反代的真实环境验收。
@@ -46,3 +47,11 @@
 - Private auth backend CI：真实 MySQL 8 初始化、站长账号唯一性、密码散列、登录、Cookie 会话、非法 Origin 拒绝、登出和限流测试通过。
 - Validate navigation：保留旧网站的浏览器功能回归，并新增 25 项登录界面、失败反馈、退出及断网降级检查；合计 205 项通过。
 - **未连接或更改生产 VPS、数据库、域名 DNS 或 GitHub Pages 的当前正式页面**。
+
+## v1.9 后续账号安全开发（仅 Draft）
+
+- 新增受保护的 `POST /auth/change-password`。请求必须来自精确允许的 `Origin`，携带有效登录 Cookie；JSON 请求体需要 `current_password`、`new_password` 两个字符串。
+- 新密码长度为 14–1024 字节，不允许与旧密码相同。每个账号每 15 分钟最多 8 次变更尝试；错误旧密码统一拒绝，达到阈值返回 HTTP 429。
+- 成功后在单个数据库事务中更新 Argon2id 密码哈希并撤销该账号全部旧会话（包括本设备），清除当前 Cookie，返回 `{"ok":true,"reauth_required":true}`；用户必须重新登录。并发更新使用旧哈希条件确保不会覆盖其他密码变更。
+- CI 使用隔离 MySQL 测试用户验证鉴权、Origin、密码长度、错误旧密码、两个并存旧会话失效及新密码可重新登录。**只增加服务端接口，尚未提供前端修改密码界面。**
+- 本次不涉及邮箱验证码、找回密码、SMTP、设备管理 UI、云同步及生产服务器部署；即使 GitHub CI 全绿也不能自动开启网页登录。
