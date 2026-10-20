@@ -1,6 +1,7 @@
 <?php
 declare(strict_types=1);
 require_once dirname(__DIR__) . '/src/auth.php';
+require_once dirname(__DIR__) . '/src/mail.php';
 
 try {
     $config = nav_config();
@@ -77,6 +78,53 @@ try {
         if (($user['role'] ?? '') !== 'owner')
             nav_reply(403, ['error'=>'Forbidden']);
         nav_reply(200, ['events'=>nav_recent_security_events($db, (int)$user['id'])]);
+    }
+    if ($path === '/auth/password-reset/request' && $method === 'POST') {
+        // No publicly usable recovery endpoint until trusted SMTP is explicitly configured.
+        if (!nav_mail_ready()) nav_reply(404, ['error'=>'Not found']);
+        nav_require_origin();
+        $body = nav_json_body();
+        $email = $body['email'] ?? null;
+        if (!is_string($email) || strlen($email)>254 || nav_email($email)===null)
+            nav_reply(400, ['error'=>'Valid email required']);
+        $normalized = nav_email($email);
+        $db = nav_db();
+        $ip = (string)($_SERVER['REMOTE_ADDR'] ?? 'unknown');
+        // Apply the same limits for existing and nonexistent addresses.
+        $allowedIp = nav_limit_try($db, nav_limit_key('reset-ip',$ip), 8);
+        $allowedMail = nav_limit_try($db, nav_limit_key('reset-email',$normalized), 3);
+        if (!$allowedIp || !$allowedMail) nav_reply(429, ['error'=>'Too many requests']);
+        $token = nav_issue_password_reset_token($db,$normalized);
+        if ($token !== null) {
+            try {
+                $delivered = nav_send_reset_mail($normalized,$token);
+            } catch (Throwable) {
+                $delivered = false;
+            }
+            if (!$delivered) nav_discard_password_reset_token($db,$token);
+            unset($token);
+        }
+        // Do not indicate if an account exists or if mail was accepted by SMTP.
+        nav_reply(202, ['ok'=>true, 'message'=>'If this address is eligible, a reset email may arrive.']);
+    }
+    if ($path === '/auth/password-reset/confirm' && $method === 'POST') {
+        if (!nav_mail_ready()) nav_reply(404, ['error'=>'Not found']);
+        nav_require_origin();
+        $db = nav_db();
+        $ip = (string)($_SERVER['REMOTE_ADDR'] ?? 'unknown');
+        if (!nav_limit_try($db, nav_limit_key('reset-confirm-ip',$ip), 15))
+            nav_reply(429, ['error'=>'Too many requests']);
+        $body = nav_json_body();
+        $token = $body['token'] ?? null;
+        $password = $body['new_password'] ?? null;
+        if (!is_string($token) || !is_string($password) ||
+            !preg_match('/^[a-f0-9]{64}$/D', $token) ||
+            strlen($password)<14 || strlen($password)>1024)
+            nav_reply(400, ['error'=>'Invalid reset request']);
+        if (!nav_redeem_password_reset_token($db,$token,$password))
+            nav_reply(400, ['error'=>'Invalid or expired reset link']);
+        nav_cookie('',time()-3600);
+        nav_reply(200, ['ok'=>true, 'reauth_required'=>true]);
     }
     if ($path === '/auth/change-password' && $method === 'POST') {
         nav_require_origin();
