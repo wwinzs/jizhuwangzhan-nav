@@ -81,6 +81,7 @@ jobs:
           php server/tests/rate-limit-boundary.php
           php server/tests/session-cap.php
           php server/tests/stale-session-revoke.php
+          php server/tests/reset-grant-concurrency.php
       - name: GCM reset queue privacy and lease tests
         run: |
           set -eu
