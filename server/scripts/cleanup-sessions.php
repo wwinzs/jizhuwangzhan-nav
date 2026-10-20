@@ -26,10 +26,19 @@ try {
     );
     $limitDelete->execute();
 
+    // Retain only 90 days of privacy-minimal audit events, in bounded batches.
+    $auditDelete = $db->prepare(
+        "DELETE FROM nav_security_events
+         WHERE created_at < UTC_TIMESTAMP(6) - INTERVAL 90 DAY
+         ORDER BY created_at, id LIMIT 500"
+    );
+    $auditDelete->execute();
+
     fwrite(STDOUT, sprintf(
-        "Maintenance complete: removed %d expired/stale sessions, %d expired rate-limit entries.\n",
+        "Maintenance complete: removed %d expired/stale sessions, %d expired rate-limit entries, %d old security events.\n",
         $sessionDelete->rowCount(),
-        $limitDelete->rowCount()
+        $limitDelete->rowCount(),
+        $auditDelete->rowCount()
     ));
 } catch (Throwable $error) {
     // Avoid logging credentials, DSNs or SQL driver exception details.
