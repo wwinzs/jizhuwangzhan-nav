@@ -44,7 +44,7 @@ try {
     unset($password, $confirmation);
     fwrite(STDOUT, "站长密码已恢复，所有旧会话已失效。请用新密码登录。\n");
 } catch (Throwable $error) {
-    fwrite(STDERR, '恢复未完成：' . ($error instanceof RuntimeException
+    fwrite(STDERR, '恢复未完成：' . (get_class($error) === RuntimeException::class
         ? $error->getMessage() : '请检查私有服务端日志及数据库迁移状态。') . PHP_EOL);
     exit(1);
 }
