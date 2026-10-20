@@ -48,6 +48,60 @@ function nav_check_upgrade_schema(PDO $db): array {
                         return ['state'=>'BLOCKED','reason'=>'missing_column'];
                 }
             }
+            // v1.9.17: columns alone are insufficient. A missing unique key
+            // could allow duplicate bearer-token digests in corrupted schemas.
+            $needUnique = [
+                'nav_users'=>'email',
+                'nav_sessions'=>'token_hash',
+                'nav_login_limits'=>'key_hash',
+                'nav_user_documents'=>'user_id',
+            ];
+            if ($step>=2) $needUnique['nav_password_reset_tokens']='token_hash';
+            $indexRows=$db->query("SELECT table_name,index_name,non_unique,
+                    column_name,seq_in_index
+                FROM information_schema.statistics
+                WHERE table_schema=DATABASE()")->fetchAll(PDO::FETCH_NUM);
+            $indexes=[];
+            foreach ($indexRows as $record) {
+                [$tbl,$index,$nonUnique,$col,$sequence]=$record;
+                $indexes[$tbl][$index][]=[(string)$col,(int)$nonUnique,(int)$sequence];
+            }
+            foreach ($needUnique as $tbl=>$column) {
+                $present=false;
+                foreach (($indexes[$tbl] ?? []) as $pieces) {
+                    if (count($pieces)===1 && $pieces[0]==[$column,0,1]) {
+                        $present=true;
+                        break;
+                    }
+                }
+                if (!$present)
+                    return ['state'=>'BLOCKED','reason'=>'missing_unique_index'];
+            }
+            $needFk=[
+                'nav_sessions'=>'user_id',
+                'nav_user_documents'=>'user_id',
+            ];
+            if ($step>=1) $needFk['nav_security_events']='user_id';
+            if ($step>=2) $needFk['nav_password_reset_tokens']='user_id';
+            $fkRows=$db->query("SELECT k.table_name,k.column_name,
+                    k.referenced_table_name,k.referenced_column_name,r.delete_rule
+                FROM information_schema.key_column_usage k
+                JOIN information_schema.referential_constraints r
+                  ON k.constraint_schema=r.constraint_schema
+                 AND k.table_name=r.table_name
+                 AND k.constraint_name=r.constraint_name
+                WHERE k.table_schema=DATABASE()
+                  AND k.referenced_table_name IS NOT NULL")->fetchAll(PDO::FETCH_NUM);
+            $haveFk=[];
+            foreach ($fkRows as $row) {
+                [$tbl,$col,$refTbl,$refCol,$deleteRule]=$row;
+                if ($refTbl==='nav_users' && $refCol==='id' && $deleteRule==='CASCADE')
+                    $haveFk[$tbl][$col]=true;
+            }
+            foreach ($needFk as $tbl=>$col) {
+                if (empty($haveFk[$tbl][$col]))
+                    return ['state'=>'BLOCKED','reason'=>'missing_owner_fk'];
+            }
             if ($step>=2) {
                 $column=$db->query("SELECT column_type FROM information_schema.columns
                     WHERE table_schema=DATABASE() AND table_name='nav_security_events'
