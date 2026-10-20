@@ -69,6 +69,15 @@ try {
         $count = nav_revoke_other_sessions($db, (int)$user['id']);
         nav_reply(200, ['ok'=>true, 'revoked_count'=>$count]);
     }
+    if ($path === '/auth/security-events' && $method === 'GET') {
+        nav_require_origin();
+        $db = nav_db();
+        $user = nav_session_user($db);
+        if (!$user) nav_reply(401, ['error'=>'Not authenticated']);
+        if (($user['role'] ?? '') !== 'owner')
+            nav_reply(403, ['error'=>'Forbidden']);
+        nav_reply(200, ['events'=>nav_recent_security_events($db, (int)$user['id'])]);
+    }
     if ($path === '/auth/change-password' && $method === 'POST') {
         nav_require_origin();
         $db = nav_db();
