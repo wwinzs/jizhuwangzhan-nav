@@ -96,7 +96,8 @@ function nav_session_user(PDO $db): ?array {
     $stmt = $db->prepare("SELECT u.id,u.email,u.role FROM nav_sessions s
        INNER JOIN nav_users u ON u.id=s.user_id
        WHERE s.token_hash=? AND s.revoked_at IS NULL
-         AND s.expires_at>UTC_TIMESTAMP(6) AND u.status='active' LIMIT 1");
+         AND s.expires_at>UTC_TIMESTAMP(6) AND u.status='active'
+         AND u.role='owner' LIMIT 1");
     $stmt->execute([hash('sha256', $token)]);
     $result = $stmt->fetch();
     return $result ?: null;
