@@ -73,6 +73,10 @@ jobs:
           test "$(MYSQL_PWD=integration_only_password mysql -N -h 127.0.0.1 -u root nav_ci \
             -e "SELECT COUNT(*) FROM information_schema.schemata WHERE schema_name='nav_preflight_stage_ci'")" = 0
           php server/scripts/preflight-upgrade.php
+      - name: Login password rotation concurrency regression
+        run: |
+          set -eu
+          php server/tests/login-password-race.php
       - name: GCM reset queue privacy and lease tests
         run: |
           set -eu
