@@ -68,6 +68,36 @@ jobs:
           curl --fail --retry 15 --retry-delay 1 --retry-connrefused http://127.0.0.1:8767/health
           API=http://127.0.0.1:8767
           ORIGIN=http://127.0.0.1:8766
+          # CORS preflight and browser-facing response headers (CI loopback HTTP only).
+          CODE=$(curl -sS -D /tmp/nav-cors-allowed -o /dev/null -w '%{http_code}' \
+            -X OPTIONS -H "Origin: $ORIGIN" \
+            -H 'Access-Control-Request-Method: POST' \
+            -H 'Access-Control-Request-Headers: content-type' "$API/auth/login")
+          test "$CODE" = 204
+          grep -Fiqx "Access-Control-Allow-Origin: $ORIGIN" /tmp/nav-cors-allowed || \
+            grep -Fiq "Access-Control-Allow-Origin: $ORIGIN" /tmp/nav-cors-allowed
+          grep -Fiq 'Access-Control-Allow-Credentials: true' /tmp/nav-cors-allowed
+          grep -Fiq 'Access-Control-Allow-Methods: GET, POST, OPTIONS' /tmp/nav-cors-allowed
+          grep -Fiq 'Access-Control-Allow-Headers: Content-Type' /tmp/nav-cors-allowed
+          grep -Fiq 'Vary: Origin' /tmp/nav-cors-allowed
+          CODE=$(curl -sS -D /tmp/nav-cors-denied -o /dev/null -w '%{http_code}' \
+            -X OPTIONS -H 'Origin: https://untrusted.example' \
+            -H 'Access-Control-Request-Method: POST' "$API/auth/login")
+          test "$CODE" = 403
+          ! grep -Eiq '^Access-Control-Allow-Origin:' /tmp/nav-cors-denied
+          CODE=$(curl -sS -o /dev/null -w '%{http_code}' \
+            -X OPTIONS -H 'Access-Control-Request-Method: POST' "$API/auth/login")
+          test "$CODE" = 403
+          CODE=$(curl -sS -D /tmp/nav-cors-unauth -o /dev/null -w '%{http_code}' \
+            -H "Origin: $ORIGIN" "$API/auth/me")
+          test "$CODE" = 401
+          grep -Fiq "Access-Control-Allow-Origin: $ORIGIN" /tmp/nav-cors-unauth
+          grep -Fiq 'Access-Control-Allow-Credentials: true' /tmp/nav-cors-unauth
+          CODE=$(curl -sS -D /tmp/nav-cors-foreign -o /dev/null -w '%{http_code}' \
+            -H 'Origin: https://untrusted.example' "$API/auth/me")
+          test "$CODE" = 401
+          ! grep -Eiq '^Access-Control-Allow-Origin:' /tmp/nav-cors-foreign
+          echo 'CORS preflight, allowed origin and rejected origin regressions passed'
           LOGIN='{"email":"owner@example.com","password":"a very long CI password 987654!"}'
           CODE=$(curl -sS -o /tmp/auth-body -w '%{http_code}' -H 'Content-Type: application/json' -d "$LOGIN" "$API/auth/login")
           test "$CODE" = 403
