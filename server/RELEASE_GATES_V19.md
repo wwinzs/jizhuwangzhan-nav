@@ -34,3 +34,11 @@
 - **仍未验证：** 实际 VPS 的全量备份恢复、PHP-FPM `open_basedir`、Nginx 外部可访问性、真实浏览器 Cookie/CORS、邮箱真实投递、生产系统用户及真实 Worker 定时器。CI 不能替代这些实机验收。
 
 本手册不会部署程序，也不会对用户的服务器执行任何命令。
+
+## v1.9.30-RC 隔离恢复与只读 HTTPS 实机检查（2026-10-20 开发）
+
+- CI 新增 `server/tests/backup-restore-ci.sh`：只允许 `CI=true` 的合成 `nav_ci` 数据库，将七表真实导出到私有临时目录，恢复至另外新建的 `nav_restore_ci`，对比全部七表数量、原站长哈希、外键/索引及合成收藏文档与会话，再清理测试环境。**这不是 VPS 上的真实数据库备份或真实灾难恢复演练**。
+- 新增 `server/scripts/check-edge-readonly.sh`：审核完成并安全放到服务器指定私有代码路径后，运维可以在交互式 SSH 终端执行 `bash server/scripts/check-edge-readonly.sh`。脚本只对本机 `127.0.0.1:443` 所映射的 `api-nav.wwinzs.cn` 域名执行 **GET / OPTIONS**，不输入密码、不读取 Cookie、不执行数据库更改。检查 HTTPS CA/域名证书、API 健康响应、可信 Origin 的跨域预检、恶意与缺失 Origin 的阻断、后端私有路径必须 403/404、单一 HSTS 头。**不会测试真实公网接入或浏览器 Cookie，也不会改变 Nginx 配置**。
+- 此前 VPS 本机 HTTPS 预检报告曾出现两份 `Strict-Transport-Security` 头；只读脚本将此情况视为 **BLOCKED**。正式发布前须经授权后检查 Nginx 与 PHP 谁负责发送 HSTS，避免两个位置叠加。不得为了让检查通过直接删除全部 HSTS。
+- 宝塔 API Draft ZIP 的 CI 现在也提供 `.sha256` 校验文件，前端 v1.9.30-RC ZIP 同样提供 SHA-256。保留工作流名称、源提交与校验摘要作为发布证据；对不上哈希立即停止。
+- 如果生产数据恢复、真实浏览器跨域 Cookie、HSTS 单一头、权限隔离或真实邮件收发仍未验证，**不得将 v1.9.30-RC 宣称为 GA 正式可用版**。
