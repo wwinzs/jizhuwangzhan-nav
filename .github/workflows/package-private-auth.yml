@@ -19,10 +19,12 @@ jobs:
         run: |
           set -eu
           for file in server/src/*.php server/public/*.php server/scripts/*.php; do php -l "$file"; done
+          bash -n server/scripts/check-auth-baota.sh
           test -s server/DEPLOY_BAOTA.md
           test ! -e server/config.local.php
           zip -q -r nav-v1.9-api-baota-draft.zip server -x 'server/tests/*' 'server/runtime/*'
           unzip -tq nav-v1.9-api-baota-draft.zip
+          unzip -Z -1 nav-v1.9-api-baota-draft.zip | grep -Fx 'server/scripts/check-auth-baota.sh'
           ! unzip -Z -1 nav-v1.9-api-baota-draft.zip | grep -Eq '(^|/)config\.local\.php$'
       - uses: actions/upload-artifact@v4
         with:
