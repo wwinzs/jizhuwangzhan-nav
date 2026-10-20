@@ -269,7 +269,7 @@
   }
 
   function toggleForgot(close) {
-    if (!enabled || user || busy || resetToken) return;
+    if (!enabled || !recoveryAvailable || user || busy || resetToken) return;
     forgotVisible = !close && !forgotVisible;
     if (!forgotVisible) $('accountForgotForm').reset();
     else {
@@ -282,7 +282,7 @@
 
   async function sendResetRequest(event) {
     event.preventDefault();
-    if (!enabled || user || busy || resetToken) return;
+    if (!enabled || !recoveryAvailable || user || busy || resetToken) return;
     var email = $('accountResetEmail').value.trim();
     if (!email || email.length > 254) return;
     busy = true;paint();setMessage('正在提交找回请求…');
@@ -302,7 +302,7 @@
 
   async function confirmReset(event) {
     event.preventDefault();
-    if (!enabled || !resetToken || busy) return;
+    if (!enabled || !recoveryAvailable || !resetToken || busy) return;
     var password = $('accountResetNewPassword').value;
     var confirm = $('accountResetConfirmPassword').value;
     if (password !== confirm) {
