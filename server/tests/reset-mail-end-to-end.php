@@ -35,6 +35,8 @@ if(httpReset('/auth/password-reset/confirm',['token'=>$token,'new_password'=>$pa
     throw new RuntimeException('Valid mail token redemption failed');
 if(httpReset('/auth/password-reset/confirm',['token'=>$token,'new_password'=>$original])!==400)
     throw new RuntimeException('Replayed mail token accepted');
+// Previous isolated brute-force regression deliberately saturated login limits.
+nav_db()->exec('DELETE FROM nav_login_limits');
 if(httpReset('/auth/login',['email'=>'owner@example.com','password'=>$original])!==401)
     throw new RuntimeException('Old password still works');
 if(httpReset('/auth/login',['email'=>'owner@example.com','password'=>$password])!==200)
