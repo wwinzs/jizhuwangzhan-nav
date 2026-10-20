@@ -65,3 +65,44 @@ function nav_logout(PDO $db): void {
             ->execute([hash('sha256', $token)]);
     nav_cookie('', time()-3600);
 }
+
+/**
+ * Change a user's password atomically and revoke all their sessions.
+ * The caller must authenticate the session, require a trusted Origin,
+ * validate the new password length and enforce an attempt limit.
+ */
+function nav_change_password(PDO $db, int $userId, string $currentPassword, string $newPassword): string {
+    $stmt = $db->prepare("SELECT password_hash FROM nav_users WHERE id=? AND status='active' LIMIT 1");
+    $stmt->execute([$userId]);
+    $oldHash = $stmt->fetchColumn();
+    if (!is_string($oldHash) || !password_verify($currentPassword, $oldHash))
+        return 'invalid';
+    if (hash_equals($currentPassword, $newPassword))
+        return 'same';
+
+    $newHash = password_hash($newPassword, PASSWORD_ARGON2ID, [
+        'memory_cost' => 65536, 'time_cost' => 3, 'threads' => 1,
+    ]);
+    $db->beginTransaction();
+    try {
+        // Compare-and-swap ensures a concurrent password change cannot be overwritten.
+        $update = $db->prepare(
+            "UPDATE nav_users SET password_hash=? WHERE id=? AND password_hash=? AND status='active'"
+        );
+        $update->execute([$newHash, $userId, $oldHash]);
+        if ($update->rowCount() !== 1) {
+            $db->rollBack();
+            return 'conflict';
+        }
+
+        $revoke = $db->prepare(
+            "UPDATE nav_sessions SET revoked_at=UTC_TIMESTAMP(6) WHERE user_id=? AND revoked_at IS NULL"
+        );
+        $revoke->execute([$userId]);
+        $db->commit();
+        return 'changed';
+    } catch (Throwable $error) {
+        if ($db->inTransaction()) $db->rollBack();
+        throw $error;
+    }
+}
