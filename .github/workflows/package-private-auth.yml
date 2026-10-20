@@ -88,8 +88,11 @@ jobs:
           unzip -Z -1 nav-v1.9-api-baota-draft.zip | grep -Fx 'server/src/sql-migrations.php'
           unzip -Z -1 nav-v1.9-api-baota-draft.zip | grep -Fx 'server/RELEASE_GATES_V19.md'
           ! unzip -Z -1 nav-v1.9-api-baota-draft.zip | grep -Eq '(^|/)config\.local\.php$'
+          sha256sum nav-v1.9-api-baota-draft.zip > nav-v1.9-api-baota-draft.sha256
       - uses: actions/upload-artifact@v4
         with:
           name: v19-baota-server-draft
-          path: nav-v1.9-api-baota-draft.zip
+          path: |
+            nav-v1.9-api-baota-draft.zip
+            nav-v1.9-api-baota-draft.sha256
           retention-days: 14
