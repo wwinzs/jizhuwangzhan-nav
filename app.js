@@ -41,7 +41,7 @@
       ['YouTube','https://www.youtube.com','fun','▶','#df6672',false],
       ['抖音','https://www.douyin.com','fun','♪','#343e52',false]
     ].map(function (l, i) { return { id: 'link-' + i, name: l[0], url: l[1], groupId: l[2], icon: l[3], color: l[4], favorite: l[5] }; }),
-    settings: { theme: 'dark', wallpaper: 'aurora', customWallpaper: '', wallpaperDim:20, wallpaperBlur:0, engine: 'baidu', customEngineUrl:'', showWidgets: true, compact: false }
+    settings: { theme: 'dark', wallpaper: 'aurora', customWallpaper: '', wallpaperDim:20, wallpaperBlur:0, engine: 'baidu', customEngineUrl:'', faviconPolicy:'local', showWidgets: true, compact: false }
   };
   var state = { data: null, activeGroup: 'all', editingId: null, sortMode: false, focus: false, monthOffset: 0, contextItemId: null, contextTrigger: null, activeFolderId: null, editingFolderId: null, layoutEditing:false, layoutSelected:null };
   var toastTimer;
@@ -169,6 +169,7 @@
         customEngineUrl: validSearchTemplate(settings.customEngineUrl) ? settings.customEngineUrl : '',
         wallpaperDim: Number.isInteger(settings.wallpaperDim) && settings.wallpaperDim>=0 && settings.wallpaperDim<=55 ? settings.wallpaperDim : 20,
         wallpaperBlur: Number.isInteger(settings.wallpaperBlur) && settings.wallpaperBlur>=0 && settings.wallpaperBlur<=8 ? settings.wallpaperBlur : 0,
+        faviconPolicy: settings.faviconPolicy === 'origin' ? 'origin' : 'local',
         showWidgets: settings.showWidgets !== false, compact: settings.compact === true
       }
     };
@@ -258,6 +259,7 @@
     $('wallpaperBlurValue').textContent=s.wallpaperBlur+'px';
     $('wallpaperRestore').disabled=!s.customWallpaper;
     $('customEngineUrl').value=s.customEngineUrl;
+    $('faviconPolicy').value=s.faviconPolicy;
     app.classList.toggle('compact', s.compact); app.classList.toggle('focus', state.focus);
     app.classList.toggle('sorting',state.sortMode);
     app.classList.toggle('manual-layout',desktopManual());
@@ -355,15 +357,19 @@
       var personal=node('img','favicon-img custom-favicon');
       personal.alt='';personal.decoding='async';personal.src=item.iconImage;
       logo.append(personal);logo.classList.add('has-favicon');
-    } else if(item.iconMode!=='letter') try {
+    } else if(item.iconMode!=='letter' && state.data.settings.faviconPolicy==='origin') try {
+      // 仅用户显式启用时，直接从网站读取图标；不把收藏列表发送给第三方图标聚合商。
       var hostname = new URL(item.url).hostname;
       var favicon = node('img','favicon-img');
-      favicon.alt = ''; favicon.decoding = 'async'; favicon.referrerPolicy = 'no-referrer';
+      favicon.alt = ''; favicon.decoding = 'async'; favicon.loading = 'lazy';
+      favicon.referrerPolicy = 'no-referrer';
       favicon.addEventListener('load',function() {
-        if (favicon.naturalWidth >= 16) { logo.append(favicon); logo.classList.add('has-favicon'); }
+        if (favicon.naturalWidth >= 16) logo.classList.add('has-favicon');
       });
-      favicon.src = 'https://www.google.com/s2/favicons?domain=' + encodeURIComponent(hostname) + '&sz=128';
-    } catch (_) { /* 保留字符图标 */ }
+      favicon.addEventListener('error',function() { favicon.remove(); });
+      logo.append(favicon);
+      favicon.src = 'https://' + hostname + '/favicon.ico';
+    } catch (_) { /* 失败时始终保留字符图标 */ }
     logo.style.background = item.color;
     wrap.dataset.linkId=item.id;
     wrap.draggable = state.sortMode || state.layoutEditing;
@@ -1207,6 +1213,10 @@
       pendingIconImage='';$('linkIconMode').value='auto';updateIconPreview();
     });
     $('customEngineSave').addEventListener('click',applySearchTemplate);
+    $('faviconPolicy').addEventListener('change',function(){
+      state.data.settings.faviconPolicy=this.value==='origin'?'origin':'local';
+      if(save()){renderTiles();toast(this.value==='origin'?'已启用原网站图标，浏览器可能连接收藏的网站':'已使用本地图标，首页无需外部图标请求');}
+    });
     $('wallpaperDim').addEventListener('input',function(){
       state.data.settings.wallpaperDim=Number(this.value);wallpaperRefresh();
     });
