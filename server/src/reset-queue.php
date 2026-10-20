@@ -40,6 +40,13 @@ function nav_enqueue_reset_mail(PDO $db, string $email): void {
     try {
         $backlog = (int)$db->query("SELECT COUNT(*) FROM nav_reset_mail_queue")->fetchColumn();
         if ($backlog >= 50) return;
+        // Within the capacity lock, suppress duplicate pending/in-flight mail
+        // for the same normalized recipient without revealing account status.
+        $dup = $db->prepare("SELECT id FROM nav_reset_mail_queue
+            WHERE recipient_hash=? AND created_at>UTC_TIMESTAMP(6)-INTERVAL 15 MINUTE
+            LIMIT 1");
+        $dup->execute([$recipientHash]);
+        if ($dup->fetchColumn() !== false) return;
         // Same work for existing and unknown emails: no owner lookup or SMTP.
         $sql = "INSERT INTO nav_reset_mail_queue
             (recipient_hash,recipient_cipher,nonce,auth_tag)
@@ -121,9 +128,9 @@ function nav_process_reset_mail(PDO $db): bool {
             WHERE email=? AND role='owner' AND status='active' LIMIT 1");
         $stmt->execute([$recipient]);
         if ($stmt->fetchColumn() !== false) {
-            // Retry only after SMTP returns false or throws. Each attempt uses
-            // a new token and invalidates the previous pending token.
-            $token = nav_issue_password_reset_token($db,$recipient);
+            // Never overwrite a still-live grant: older successfully delivered
+            // mail should not become invalid due to duplicate requests.
+            $token = nav_issue_password_reset_token($db,$recipient,true);
             if ($token !== null) {
                 try {
                     $delivered = nav_send_reset_mail($recipient,$token);
