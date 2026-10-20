@@ -2,6 +2,28 @@
 declare(strict_types=1);
 require_once __DIR__ . '/bootstrap.php';
 
+/**
+ * Deliberately store event name, user ID and timestamp only.
+ * Write errors propagate: sensitive actions must never silently skip audit.
+ */
+function nav_audit(PDO $db, int $userId, string $eventType): void {
+    $allowed = ['login_success', 'logout', 'password_changed',
+        'other_sessions_revoked', 'owner_recovery'];
+    if (!in_array($eventType, $allowed, true))
+        throw new InvalidArgumentException('Unknown security event');
+    $db->prepare('INSERT INTO nav_security_events (user_id,event_type) VALUES (?,?)')
+       ->execute([$userId, $eventType]);
+}
+
+function nav_recent_security_events(PDO $db, int $userId): array {
+    $stmt = $db->prepare("SELECT event_type,
+            DATE_FORMAT(created_at,'%Y-%m-%dT%H:%i:%sZ') AS created_at
+        FROM nav_security_events WHERE user_id=?
+        ORDER BY created_at DESC, id DESC LIMIT 30");
+    $stmt->execute([$userId]);
+    return $stmt->fetchAll(PDO::FETCH_ASSOC);
+}
+
 function nav_limit_key(string $scope, string $value): string {
     return hash_hmac('sha256', $scope . ':' . $value, nav_config()['app_key']);
 }
@@ -41,8 +63,16 @@ function nav_create_session(PDO $db, int $userId): void {
     $token = bin2hex(random_bytes(32));
     $hash = hash('sha256', $token);
     $expiry = time() + 14 * 86400;
-    $stmt = $db->prepare('INSERT INTO nav_sessions (user_id, token_hash, expires_at) VALUES (?, ?, ?)');
-    $stmt->execute([$userId, $hash, gmdate('Y-m-d H:i:s', $expiry)]);
+    $db->beginTransaction();
+    try {
+        $stmt = $db->prepare('INSERT INTO nav_sessions (user_id, token_hash, expires_at) VALUES (?, ?, ?)');
+        $stmt->execute([$userId, $hash, gmdate('Y-m-d H:i:s', $expiry)]);
+        nav_audit($db, $userId, 'login_success');
+        $db->commit();
+    } catch (Throwable $error) {
+        if ($db->inTransaction()) $db->rollBack();
+        throw $error;
+    }
     nav_cookie($token, $expiry);
 }
 
@@ -60,9 +90,28 @@ function nav_session_user(PDO $db): ?array {
 
 function nav_logout(PDO $db): void {
     $token = $_COOKIE['__Host-nav_session'] ?? '';
-    if (is_string($token) && preg_match('/^[0-9a-f]{64}$/', $token))
-        $db->prepare('UPDATE nav_sessions SET revoked_at=UTC_TIMESTAMP(6) WHERE token_hash=? AND revoked_at IS NULL')
-            ->execute([hash('sha256', $token)]);
+    if (is_string($token) && preg_match('/^[0-9a-f]{64}$/', $token)) {
+        $hash = hash('sha256', $token);
+        $db->beginTransaction();
+        try {
+            $query = $db->prepare("SELECT s.user_id FROM nav_sessions s
+                JOIN nav_users u ON u.id=s.user_id
+                WHERE s.token_hash=? AND s.revoked_at IS NULL
+                AND s.expires_at>UTC_TIMESTAMP(6) AND u.status='active'
+                LIMIT 1 FOR UPDATE");
+            $query->execute([$hash]);
+            $userId = $query->fetchColumn();
+            if ($userId !== false) {
+                $db->prepare("UPDATE nav_sessions SET revoked_at=UTC_TIMESTAMP(6)
+                    WHERE token_hash=? AND revoked_at IS NULL")->execute([$hash]);
+                nav_audit($db, (int)$userId, 'logout');
+            }
+            $db->commit();
+        } catch (Throwable $error) {
+            if ($db->inTransaction()) $db->rollBack();
+            throw $error;
+        }
+    }
     nav_cookie('', time()-3600);
 }
 
@@ -99,6 +148,7 @@ function nav_change_password(PDO $db, int $userId, string $currentPassword, stri
             "UPDATE nav_sessions SET revoked_at=UTC_TIMESTAMP(6) WHERE user_id=? AND revoked_at IS NULL"
         );
         $revoke->execute([$userId]);
+        nav_audit($db, $userId, 'password_changed');
         $db->commit();
         return 'changed';
     } catch (Throwable $error) {
@@ -142,11 +192,55 @@ function nav_active_sessions(PDO $db, int $userId): array {
 function nav_revoke_other_sessions(PDO $db, int $userId): int {
     $token = $_COOKIE['__Host-nav_session'] ?? '';
     if (!is_string($token) || !preg_match('/^[0-9a-f]{64}$/', $token)) return 0;
-    $stmt = $db->prepare(
-        "UPDATE nav_sessions SET revoked_at=UTC_TIMESTAMP(6)
-         WHERE user_id=? AND token_hash<>? AND revoked_at IS NULL
-           AND expires_at>UTC_TIMESTAMP(6)"
-    );
-    $stmt->execute([$userId, hash('sha256', $token)]);
-    return $stmt->rowCount();
+    $db->beginTransaction();
+    try {
+        $stmt = $db->prepare(
+            "UPDATE nav_sessions SET revoked_at=UTC_TIMESTAMP(6)
+             WHERE user_id=? AND token_hash<>? AND revoked_at IS NULL
+               AND expires_at>UTC_TIMESTAMP(6)"
+        );
+        $stmt->execute([$userId, hash('sha256', $token)]);
+        $count = $stmt->rowCount();
+        if ($count > 0) nav_audit($db, $userId, 'other_sessions_revoked');
+        $db->commit();
+        return $count;
+    } catch (Throwable $error) {
+        if ($db->inTransaction()) $db->rollBack();
+        throw $error;
+    }
+}
+
+/**
+ * Recovery requires a trusted, interactive server CLI. Never expose via HTTP.
+ * One atomic password replacement + all-session revocation + audit entry.
+ */
+function nav_recover_owner_password(PDO $db, string $email, string $newPassword): bool {
+    $normalized = nav_email($email);
+    if ($normalized === null || strlen($newPassword) < 14 || strlen($newPassword) > 1024)
+        return false;
+    $newHash = password_hash($newPassword, PASSWORD_ARGON2ID, [
+        'memory_cost' => 65536, 'time_cost' => 3, 'threads' => 1,
+    ]);
+    $db->beginTransaction();
+    try {
+        $query = $db->prepare("SELECT id FROM nav_users
+            WHERE email=? AND role='owner' AND status='active' LIMIT 1 FOR UPDATE");
+        $query->execute([$normalized]);
+        $userId = $query->fetchColumn();
+        if ($userId === false) {
+            $db->rollBack();
+            return false;
+        }
+        $id = (int)$userId;
+        $db->prepare('UPDATE nav_users SET password_hash=? WHERE id=?')
+            ->execute([$newHash,$id]);
+        $db->prepare('UPDATE nav_sessions SET revoked_at=UTC_TIMESTAMP(6)
+            WHERE user_id=? AND revoked_at IS NULL')->execute([$id]);
+        nav_audit($db, $id, 'owner_recovery');
+        $db->commit();
+        return true;
+    } catch (Throwable $error) {
+        if ($db->inTransaction()) $db->rollBack();
+        throw $error;
+    }
 }
