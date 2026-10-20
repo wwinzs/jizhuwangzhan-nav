@@ -20,6 +20,7 @@ jobs:
           set -eu
           for file in server/src/*.php server/public/*.php server/scripts/*.php; do php -l "$file"; done
           bash -n server/scripts/check-auth-baota.sh
+          bash -n server/scripts/check-edge-readonly.sh
           test -s server/DEPLOY_BAOTA.md
           test -s server/RELEASE_GATES_V19.md
           test -s server/scripts/preflight-upgrade.php
@@ -47,6 +48,7 @@ jobs:
             server/public/index.php
             server/schema.sql
             server/scripts/check-auth-baota.sh
+            server/scripts/check-edge-readonly.sh
             server/scripts/check-reset-mail-queue.php
             server/scripts/cleanup-sessions.php
             server/scripts/create-owner.php
@@ -80,6 +82,7 @@ jobs:
           unzip -Z -1 nav-v1.9-api-baota-draft.zip | grep -Fx 'server/scripts/check-reset-mail-queue.php'
           unzip -Z -1 nav-v1.9-api-baota-draft.zip | grep -Fx 'server/scripts/recover-owner.php'
           unzip -Z -1 nav-v1.9-api-baota-draft.zip | grep -Fx 'server/scripts/check-auth-baota.sh'
+          unzip -Z -1 nav-v1.9-api-baota-draft.zip | grep -Fx 'server/scripts/check-edge-readonly.sh'
           unzip -Z -1 nav-v1.9-api-baota-draft.zip | grep -Fx 'server/scripts/preflight-upgrade.php'
           unzip -Z -1 nav-v1.9-api-baota-draft.zip | grep -Fx 'server/scripts/preflight-worker.php'
           unzip -Z -1 nav-v1.9-api-baota-draft.zip | grep -Fx 'server/src/sql-migrations.php'
