@@ -4,6 +4,7 @@
   var API_BASE = 'https://api-nav.wwinzs.cn';
   var AUTH_HOSTNAME = 'nav.wwinzs.cn';
   var enabled = false, busy = false, user = null, otherSessionCount = 0;
+  var resetToken = null, forgotVisible = false;
   var $ = function (id) { return document.getElementById(id); };
 
   function setMessage(message, isError) {
@@ -26,6 +27,17 @@
     $('accountChangePasswordCancel').disabled = busy;
     $('accountSessionsToggle').disabled = busy;
     $('accountRevokeOthers').disabled = busy || otherSessionCount === 0;
+    $('accountForgotToggle').disabled = busy;
+    $('accountForgotSubmit').disabled = busy;
+    $('accountForgotCancel').disabled = busy;
+    $('accountResetSubmit').disabled = busy;
+    $('accountResetCancel').disabled = busy;
+    $('accountForgotToggle').hidden = !!user || !!resetToken;
+    $('accountForgotToggle').setAttribute('aria-expanded', String(forgotVisible));
+    $('accountForgotForm').hidden = !!user || !!resetToken || !forgotVisible;
+    $('accountResetForm').hidden = !!user || !resetToken;
+    $('accountLoginForm').hidden = !user && (!!resetToken || forgotVisible);
+
     if (!user) {
       otherSessionCount = 0;
       $('accountSessionsPanel').hidden = true;
@@ -232,6 +244,93 @@
     await loadSessions();
   }
 
+  function readResetFragment() {
+    // A short inline <head> script normally removes the fragment before assets load.
+    var fromHead = window.__navResetFragment;
+    window.__navResetFragment = null;
+    var fromHash = location.hash.startsWith('#password-reset=')
+      ? location.hash.slice('#password-reset='.length) : null;
+    if (fromHash !== null) history.replaceState(history.state,'',location.pathname+location.search);
+    var token = fromHead || fromHash;
+    if (typeof token === 'string' && /^[a-f0-9]{64}$/.test(token)) {
+      resetToken = token; // Memory-only; never localStorage, query string or logs.
+      forgotVisible = false;
+    }
+  }
+
+  function cancelReset() {
+    if (busy) return;
+    resetToken = null;
+    forgotVisible = false;
+    $('accountResetForm').reset();
+    $('accountForgotForm').reset();
+    paint();
+    setMessage('');
+  }
+
+  function toggleForgot(close) {
+    if (!enabled || user || busy || resetToken) return;
+    forgotVisible = !close && !forgotVisible;
+    if (!forgotVisible) $('accountForgotForm').reset();
+    else {
+      $('accountResetEmail').value = $('accountEmail').value.trim();
+      $('accountResetEmail').focus();
+    }
+    setMessage('');
+    paint();
+  }
+
+  async function sendResetRequest(event) {
+    event.preventDefault();
+    if (!enabled || user || busy || resetToken) return;
+    var email = $('accountResetEmail').value.trim();
+    if (!email || email.length > 254) return;
+    busy = true;paint();setMessage('正在提交找回请求…');
+    try {
+      var response = await request('/auth/password-reset/request', {
+        method:'POST',
+        headers:{'Content-Type':'application/json','Accept':'application/json'},
+        body:JSON.stringify({email:email})
+      });
+      if (!response || response.ok !== true) throw Error('服务器响应无效');
+      setMessage('如该邮箱符合找回条件，你可能会收到重置邮件。请检查收件箱或垃圾邮件。');
+      $('accountForgotForm').reset();
+    } catch(err) {
+      setMessage(err && err.message || '提交请求失败',true);
+    } finally {busy=false;paint();}
+  }
+
+  async function confirmReset(event) {
+    event.preventDefault();
+    if (!enabled || !resetToken || busy) return;
+    var password = $('accountResetNewPassword').value;
+    var confirm = $('accountResetConfirmPassword').value;
+    if (password !== confirm) {
+      setMessage('两次输入的新密码不一致。',true);return;
+    }
+    var length = new TextEncoder().encode(password).length;
+    if (length < 14 || length > 1024) {
+      setMessage('新密码须为 14–1024 字节。',true);return;
+    }
+    busy=true;paint();setMessage('正在修改登录密码…');
+    try {
+      var data = await request('/auth/password-reset/confirm',{
+        method:'POST',
+        headers:{'Content-Type':'application/json','Accept':'application/json'},
+        body:JSON.stringify({token:resetToken,new_password:password})
+      });
+      if (!data || data.ok !== true || data.reauth_required !== true)
+        throw Error('服务器未确认重置成功');
+      resetToken=null; user=null;forgotVisible=false;
+      $('accountResetForm').reset();
+      $('accountPassword').value='';
+      setMessage('密码已重置，所有原登录会话均已失效，请用新密码登录。');
+    } catch (err) {
+      setMessage(err && err.status===400 ? '链接可能已失效或过期，请重新申请找回邮件。' :
+        err && err.message || '重置失败',true);
+    } finally {busy=false;paint();}
+  }
+
   function initialize(options) {
     options = options || {};
     var allowedHost = location.hostname === AUTH_HOSTNAME;
@@ -241,9 +340,17 @@
     enabled = allowedHost && options.enabled === true;
     API_BASE = options.testMode === true && location.hostname === '127.0.0.1'
       ? (options.apiBase || API_BASE) : 'https://api-nav.wwinzs.cn';
+    readResetFragment();
     $('accountButton').hidden = !enabled;
-    if (!enabled) {user=null;paint();return;}
-    paint();refresh();
+    if (!enabled) {user=null;resetToken=null;forgotVisible=false;paint();return;}
+    if (resetToken) {
+      user = null;
+      paint();
+      $('accountDialog').showModal();
+      $('accountResetNewPassword').focus();
+    } else {
+      paint();refresh();
+    }
   }
 
   function bind() {
@@ -258,6 +365,11 @@
     $('accountChangePasswordToggle').addEventListener('click',function () {togglePasswordForm(false);});
     $('accountChangePasswordCancel').addEventListener('click',function () {togglePasswordForm(true);});
     $('accountChangePasswordForm').addEventListener('submit',changePassword);
+    $('accountForgotToggle').addEventListener('click',function () {toggleForgot(false);});
+    $('accountForgotCancel').addEventListener('click',function () {toggleForgot(true);});
+    $('accountForgotForm').addEventListener('submit',sendResetRequest);
+    $('accountResetForm').addEventListener('submit',confirmReset);
+    $('accountResetCancel').addEventListener('click',cancelReset);
     $('accountSessionsToggle').addEventListener('click',function () {toggleSessionsPanel(false);});
     $('accountRevokeOthers').addEventListener('click',revokeOtherSessions);
     window.NavAuth = { initialize:initialize, refresh:refresh };
