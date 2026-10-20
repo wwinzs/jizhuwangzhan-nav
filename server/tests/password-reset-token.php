@@ -28,6 +28,10 @@ assertReset((int)$row['remaining']>=840 && (int)$row['remaining']<=900,'15-minut
 
 $t2=nav_issue_password_reset_token($db,'owner@example.com');
 assertReset(is_string($t2) && $t2!==$t1,'replacement grant is distinct');
+assertReset(nav_issue_password_reset_token($db,'owner@example.com',true)===null,
+    'SMTP worker preserves existing valid emailed grant');
+assertReset(nav_redeem_password_reset_token($db,$t2,'too short')===false,
+    'preserved token is still the one in effect');
 assertReset(!nav_redeem_password_reset_token($db,$t1,$newPass),'reissuing invalidates prior grant');
 assertReset(!nav_redeem_password_reset_token($db,$t2,'too short'),'weak replacement password rejected');
 assertReset(!nav_redeem_password_reset_token($db,str_repeat('g',64),$newPass),'invalid token syntax rejected');
