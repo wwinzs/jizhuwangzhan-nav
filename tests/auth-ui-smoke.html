@@ -4,7 +4,7 @@
 (async function () {
   var key='jizhuwangzhan-nav:v1',backup=localStorage.getItem(key);
   var frame=document.getElementById('site'),checks=0,requests=[],rejectNetwork=false,loggedIn=false;
-  var savedPassword='a safe test password';
+  var savedPassword='a safe test password', liveSessions=3, confirmCount=0;
   function ok(cond,msg){checks++;if(!cond)throw Error('FAIL: '+msg);}
   function el(id){return frame.contentDocument.getElementById(id);}
   function sleep(){return new Promise(function(resolve){setTimeout(resolve,110);});}
@@ -20,6 +20,7 @@
     ok(!el('accountDialog').open,'account dialog closed initially');
     ok(el('tiles').querySelectorAll('.tile').length>0,'existing local homepage still renders');
     var existingData=localStorage.getItem(key);
+    frame.contentWindow.confirm=function(){confirmCount++;return true;};
     frame.contentWindow.fetch=function(url,opts){
       requests.push({url:url,options:opts});
       if(rejectNetwork)return Promise.reject(new TypeError('offline'));
@@ -42,6 +43,23 @@
           savedPassword=passwordRequest.new_password;
           loggedIn=false;data={ok:true,reauth_required:true};
         }
+      } else if(route==='auth/sessions'){
+        if(!loggedIn){status=401;data={error:'Not authenticated'};}
+        else {
+          data={sessions:[]};
+          for(var i=0;i<liveSessions;i++){
+            data.sessions.push({
+              created_at:'2026-10-20T06:00:00Z',
+              expires_at:'2026-11-03T06:00:00Z',
+              current:i===0
+            });
+          }
+        }
+      } else if(route==='sessions/revoke-others'){
+        var revokeRequest=JSON.parse(opts.body);
+        if(!loggedIn){status=401;data={error:'Not authenticated'};}
+        else if(revokeRequest.confirm!==true){status=400;data={error:'Explicit confirmation required'};}
+        else {data={ok:true,revoked_count:liveSessions-1};liveSessions=1;}
       } else if(route==='auth/logout'){loggedIn=false;data={ok:true};}
       else {status=404;data={error:'Not found'};}
       return Promise.resolve({
@@ -76,6 +94,23 @@
     ok(loginCall.options.credentials==='include'&&loginCall.options.method==='POST','login uses cookie POST');
     ok(loginCall.options.headers['Content-Type']==='application/json','login request JSON only');
     ok(localStorage.getItem(key)===existingData,'login does not modify saved bookmarks');
+    ok(el('accountSessionsPanel').hidden,'login session manager is initially hidden');
+    el('accountSessionsToggle').click();
+    await sleep();
+    ok(!el('accountSessionsPanel').hidden,'session manager opens');
+    ok(el('accountSessionsList').children.length===3,'current and other sessions appear');
+    ok(!el('accountRevokeOthers').disabled,'other session revocation available');
+    ok(el('accountSessionsList').textContent.includes('当前会话'),'current session is clearly marked');
+    el('accountRevokeOthers').click();
+    await sleep();
+    ok(confirmCount===1,'revoking other sessions requires explicit user confirmation');
+    ok(el('accountSessionsList').children.length===1,'revoked other sessions disappear');
+    ok(el('accountRevokeOthers').disabled,'cannot revoke others when none remain');
+    ok(el('accountMessage').textContent.includes('当前设备仍保持登录'),'current login preserved after revoking others');
+    var revokeCall=requests.find(function(r){return String(r.url).endsWith('/auth/sessions/revoke-others');});
+    ok(!!revokeCall && revokeCall.options.credentials==='include' && revokeCall.options.method==='POST','session revocation uses authenticated POST');
+    ok(JSON.parse(revokeCall.options.body).confirm===true,'revoke request must include confirmation');
+    ok(localStorage.getItem(key)===existingData,'session management preserves local bookmarks');
     ok(el('accountChangePasswordForm').hidden,'password form initially hidden');
     el('accountChangePasswordToggle').click();
     ok(!el('accountChangePasswordForm').hidden,'password change form opened');
