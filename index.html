@@ -128,6 +128,17 @@
   <button id="customEngineSave" class="ghost" type="button">保存自定义搜索引擎</button>
   <p id="engineHint" class="field-hint">例如：https://www.ecosia.org/search?q=%s</p>
 </section>
+<section class="setting-section">
+  <h3>◉ 图标加载与国内访问</h3>
+  <p>默认使用本地字符图标，避免打开主页时连接 Google 等第三方图片服务。</p>
+  <label class="favicon-policy-label">网站图标显示方式
+    <select id="faviconPolicy">
+      <option value="local">本地图标（推荐，速度快）</option>
+      <option value="origin">尝试从收藏的网站加载图标（按需）</option>
+    </select>
+  </label>
+  <p class="field-hint">开启原网站图标后，浏览器会直接请求收藏网站的 /favicon.ico；部分网站可能无法访问或图标不存在，届时自动使用字符图标。已上传的自定义图标不受影响。</p>
+</section>
 <section class="setting-section"><h3>▦ 桌面显示</h3>
   <label class="checkbox-line"><input id="showWidgets" type="checkbox" checked> 显示桌面小组件</label>
   <label class="checkbox-line"><input id="compact" type="checkbox"> 紧凑排列图标</label>
