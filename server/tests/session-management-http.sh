@@ -2,6 +2,7 @@
 # Loopback-only CI test. Never point at the real VPS or production accounts.
 set -euo pipefail
 umask 077
+trap 'printf "Session-management check failed at line %s\\n" "$LINENO" >&2' ERR
 api="$1"
 origin="$2"
 if [[ "$api" != 'http://127.0.0.1:8767' || "$origin" != 'http://127.0.0.1:8766' ]]; then
@@ -20,6 +21,7 @@ session() {
   [[ "$code" == 200 ]]
   sed -n -E 's/^[Ss]et-[Cc]ookie: __Host-nav_session=([a-f0-9]{64});.*$/\1/p' "$headers" | head -n 1
 }
+echo 'Session smoke: unauthenticated access checks'
 code=$(curl -sS -o "$tmp/body" -w '%{http_code}' -H "Origin: $origin" "$api/auth/sessions")
 [[ "$code" == 401 ]]
 code=$(curl -sS -o "$tmp/body" -w '%{http_code}' "$api/auth/sessions")
@@ -28,12 +30,14 @@ code=$(curl -sS -o "$tmp/body" -w '%{http_code}' -H "Origin: $origin" \
     -H 'Content-Type: application/json' --data '{}' "$api/auth/sessions/revoke-others")
 [[ "$code" == 401 ]]
 
+echo 'Session smoke: create multiple sessions'
 t1=$(session "$tmp/h1")
 t2=$(session "$tmp/h2")
 t3=$(session "$tmp/h3")
 [[ "${#t1}" -eq 64 && "${#t2}" -eq 64 && "${#t3}" -eq 64 ]]
 [[ "$t1" != "$t2" && "$t1" != "$t3" && "$t2" != "$t3" ]]
 
+echo 'Session smoke: validate listing and Origin'
 code=$(curl -sS -o "$tmp/body" -w '%{http_code}' \
   -b "__Host-nav_session=$t3" -H 'Origin: https://untrusted.example' "$api/auth/sessions")
 [[ "$code" == 403 ]]
@@ -72,6 +76,7 @@ body=json.load(open(sys.argv[1],encoding='utf-8'))
 assert body=={'ok':True,'revoked_count':2},body
 PY
 
+echo 'Session smoke: verify revoked tokens'
 for token in "$t1" "$t2"; do
   code=$(curl -sS -o "$tmp/body" -w '%{http_code}' \
     -b "__Host-nav_session=$token" "$api/auth/me")
