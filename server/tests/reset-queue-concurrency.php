@@ -5,16 +5,18 @@ if (getenv('CI') !== 'true') { fwrite(STDERR, "CI only.\n"); exit(2); }
 require_once dirname(__DIR__) . '/src/reset-queue.php';
 $db=nav_db();
 if (in_array('--child', $argv, true)) {
-    nav_enqueue_reset_mail($db, 'unknown@example.com');
+    $index=$argv[2] ?? null;
+    if (!is_string($index) || !ctype_digit($index)) exit(2);
+    nav_enqueue_reset_mail($db, 'parallel'.$index.'@example.com');
     exit(0);
 }
 $db->exec('DELETE FROM nav_reset_mail_queue');
-for ($i=0; $i<45; $i++) nav_enqueue_reset_mail($db, 'unknown@example.com');
+for ($i=0; $i<45; $i++) nav_enqueue_reset_mail($db, 'seed'.$i.'@example.com');
 $count=(int)$db->query('SELECT COUNT(*) FROM nav_reset_mail_queue')->fetchColumn();
 if ($count !== 45) throw new RuntimeException('Queue prefill failed');
 $workers=[];
 for ($i=0; $i<12; $i++) {
-    $command=escapeshellarg(PHP_BINARY).' '.escapeshellarg(__FILE__).' --child';
+    $command=escapeshellarg(PHP_BINARY).' '.escapeshellarg(__FILE__).' --child '.escapeshellarg((string)$i);
     $proc=proc_open($command, [0=>['pipe','r'],1=>['pipe','w'],2=>['pipe','w']], $pipes);
     if (!is_resource($proc)) throw new RuntimeException('Unable to start synthetic worker');
     fclose($pipes[0]);
