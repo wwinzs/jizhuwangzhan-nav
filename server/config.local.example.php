@@ -11,7 +11,7 @@ return [
     'app_key' => 'REPLACE_WITH_AT_LEAST_64_RANDOM_HEX_CHARACTERS',
     'require_https' => true,
     // Disabled until SMTP is verified, rate limiting and end-to-end browser testing pass.
-    'password_reset_enabled' => false,
+    'password_reset_enabled' => false, // Requires migration 003 and a separately enabled CLI mail worker.
     'smtp' => [
         'host' => 'smtp.example.com',
         'port' => 465,
