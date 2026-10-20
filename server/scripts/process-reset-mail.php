@@ -10,6 +10,8 @@ require_once dirname(__DIR__) . '/src/reset-queue.php';
 require_once dirname(__DIR__) . '/src/mail.php';
 
 try {
+    if (!nav_private_config_secure(dirname(__DIR__) . '/config.local.php'))
+        throw new RuntimeException('Private worker config is not secure');
     if (!nav_mail_ready() || !nav_reset_queue_ready())
         throw new RuntimeException('Mail worker not enabled');
     $db = nav_db();
