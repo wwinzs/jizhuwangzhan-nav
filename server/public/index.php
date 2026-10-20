@@ -63,7 +63,9 @@ try {
         $db = nav_db();
         $user = nav_session_user($db);
         if (!$user) nav_reply(401, ['error'=>'Not authenticated']);
-        nav_json_body();
+        $body = nav_json_body();
+        if (($body['confirm'] ?? null) !== true)
+            nav_reply(400, ['error'=>'Explicit confirmation required']);
         $count = nav_revoke_other_sessions($db, (int)$user['id']);
         nav_reply(200, ['ok'=>true, 'revoked_count'=>$count]);
     }
