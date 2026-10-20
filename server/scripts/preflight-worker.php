@@ -11,12 +11,8 @@ require_once dirname(__DIR__) . '/src/reset-queue.php';
 require_once __DIR__ . '/preflight-upgrade.php';
 try {
     $file=dirname(__DIR__) . '/config.local.php';
-    $stat=@stat($file);
-    if (!$stat || ($stat['mode'] & 0077)!==0)
-        throw new RuntimeException('private config must not be group/world accessible');
-    if (function_exists('posix_geteuid') && posix_geteuid() !== 0
-        && posix_geteuid() !== $stat['uid'])
-        throw new RuntimeException('unexpected worker identity');
+    if (!nav_private_config_secure($file))
+        throw new RuntimeException('unsafe private config file or worker identity');
     $config=nav_config();
     if (($config['require_https'] ?? true) !== true
         || ($config['frontend_origin'] ?? null) !== 'https://nav.wwinzs.cn')
