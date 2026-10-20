@@ -11,15 +11,15 @@ if (PHP_SAPI !== 'cli') {
     exit;
 }
 if (function_exists('posix_geteuid') && posix_geteuid() !== 0) {
-    fwrite(STDERR, "Run as root on the VPS so the config can be owned by www.\n");
+    fwrite(STDERR, "请使用服务器 root 用户运行安装程序，以便安全设置配置文件权限。\n");
     exit(1);
 }
 if (!defined('PASSWORD_ARGON2ID') || !extension_loaded('pdo_mysql')) {
-    fwrite(STDERR, "PHP Argon2id and pdo_mysql are required.\n");
+    fwrite(STDERR, "缺少必要的 PHP 扩展：Argon2id 或 pdo_mysql。\n");
     exit(1);
 }
 if (!function_exists('stream_isatty') || !stream_isatty(STDIN)) {
-    fwrite(STDERR, "Interactive SSH terminal required. Do not pipe secrets into this script.\n");
+    fwrite(STDERR, "请在交互式 SSH 终端中运行，勿通过管道传入密码。\n");
     exit(1);
 }
 
@@ -38,41 +38,41 @@ function installPrompt(string $label, bool $secret = false): string {
     } finally {
         if ($secret) { @system('stty echo'); fwrite(STDOUT, PHP_EOL); }
     }
-    if (!is_string($line)) throw new RuntimeException('Input cancelled.');
+    if (!is_string($line)) throw new RuntimeException('输入已取消。');
     return rtrim($line, "\r\n");
 }
 
 try {
     if (!is_dir($public) || realpath($public) !== $expectedPublic) {
-        throw new RuntimeException('Unexpected project path. Expected ' . $expectedPublic);
+        throw new RuntimeException('安装目录不正确，预期目录：' . $expectedPublic);
     }
     if (!is_file($schemaFile) || !is_file($public . '/index.php')) {
-        throw new RuntimeException('Backend package files are incomplete.');
+        throw new RuntimeException('后端安装包文件不完整，请检查是否解压成功。');
     }
     if (file_exists($configFile) || is_link($configFile)) {
-        throw new RuntimeException('config.local.php already exists. Refusing to overwrite credentials or data.');
+        throw new RuntimeException('已存在 config.local.php，为避免覆盖已有账号配置，安装已停止。');
     }
 
-    echo "Private account API v1.9 Draft: isolated database installation\n";
-    echo "Prerequisite: create an EMPTY database and its dedicated user in Baota first.\n";
-    $name = installPrompt('Dedicated database name: ');
-    $dbUser = installPrompt('Dedicated database user: ');
-    $dbPassword = installPrompt('Database user password (hidden): ', true);
-    $ownerEmail = strtolower(trim(installPrompt('Owner email: ')));
-    $ownerPassword = installPrompt('New owner password (at least 14 bytes, hidden): ', true);
-    $confirmation = installPrompt('Confirm owner password (hidden): ', true);
+    echo "记住网站 v1.9（测试版）—— 独立账号数据库安装\n";
+    echo "请先在宝塔创建一个全新的空数据库和专用数据库用户。\n";
+    $name = installPrompt('请输入数据库名称：');
+    $dbUser = installPrompt('请输入数据库用户名：');
+    $dbPassword = installPrompt('请输入数据库密码（输入时不显示）：', true);
+    $ownerEmail = strtolower(trim(installPrompt('请输入站长邮箱：')));
+    $ownerPassword = installPrompt('请设置站长登录密码（至少 14 字节，输入时不显示）：', true);
+    $confirmation = installPrompt('请再次输入站长登录密码（不显示）：', true);
 
     if (!preg_match('/^[a-zA-Z0-9_]{1,48}$/D', $name)
         || !preg_match('/^[a-zA-Z0-9_]{1,80}$/D', $dbUser)
         || $dbPassword === '' || strlen($dbPassword) > 4096) {
-        throw new RuntimeException('Invalid dedicated database name, user, or password.');
+        throw new RuntimeException('数据库名称、用户名或密码不符合要求。');
     }
     if (!filter_var($ownerEmail, FILTER_VALIDATE_EMAIL) || strlen($ownerEmail) > 254) {
-        throw new RuntimeException('Invalid owner email.');
+        throw new RuntimeException('站长邮箱格式无效。');
     }
     if (strlen($ownerPassword) < 14 || strlen($ownerPassword) > 1024
         || !hash_equals($ownerPassword, $confirmation)) {
-        throw new RuntimeException('Owner password must be 14–1024 bytes and match confirmation.');
+        throw new RuntimeException('站长密码必须为 14～1024 字节，且两次输入一致。');
     }
 
     // Avoid accidentally initializing another existing application's database.
@@ -92,13 +92,13 @@ try {
         "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = DATABASE()"
     )->fetchColumn();
     if ($count !== 0) {
-        throw new RuntimeException('Database is not empty. Refusing to modify existing tables.');
+        throw new RuntimeException('数据库不是空库。为保护已有数据，安装已停止。');
     }
 
     // DDL is not transactional in MySQL. If a statement fails, preserve partial
     // state for inspection rather than blindly dropping any table.
     $sql = file_get_contents($schemaFile);
-    if (!is_string($sql) || $sql === '') throw new RuntimeException('Missing schema.');
+    if (!is_string($sql) || $sql === '') throw new RuntimeException('缺少数据库建表文件 schema.sql。');
     foreach (explode(';', $sql) as $statement) {
         if (trim($statement) !== '') $pdo->exec($statement);
     }
@@ -117,24 +117,24 @@ try {
         . "// Private server configuration; not under public/.\n"
         . "return " . var_export($cfg, true) . ";\n";
     if (file_put_contents($configFile, $configContents, LOCK_EX) === false) {
-        throw new RuntimeException('Unable to create secure config file.');
+        throw new RuntimeException('无法写入数据库安全配置文件。');
     }
     if (!chown($configFile, 'www') || !chgrp($configFile, 'www') || !chmod($configFile, 0600)) {
-        throw new RuntimeException('Cannot set private config owner and 0600 permissions.');
+        throw new RuntimeException('无法为数据库配置文件设置 www 属主及 0600 权限。');
     }
 
     $tables = (int) $pdo->query(
         "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = DATABASE()"
     )->fetchColumn();
-    if ($tables !== 4) throw new RuntimeException('Database table count mismatch.');
+    if ($tables !== 4) throw new RuntimeException('数据库建表数量不正确。');
     if ((int) $pdo->query("SELECT COUNT(*) FROM nav_users WHERE role='owner'")->fetchColumn() !== 1) {
-        throw new RuntimeException('Owner account verification failed.');
+        throw new RuntimeException('站长账号验证失败。');
     }
-    echo "INSTALL PASS: 4 dedicated tables, one owner, private config mode 0600.\n";
-    echo "No public signup, cloud sync, or navigation login UI was enabled.\n";
-    echo "Next: test https://api-nav.wwinzs.cn/health and PHP-FPM isolation.\n";
+    echo "安装成功：已建立 4 张独立数据表、1 个站长账号，配置文件权限为 0600。\n";
+    echo "目前未开启公开注册、云同步，也未启用导航页上的登录入口。\n";
+    echo "下一步：验证 https://api-nav.wwinzs.cn/health 和 PHP-FPM 访问限制。\n";
 } catch (Throwable $error) {
-    fwrite(STDERR, 'INSTALL STOPPED: ' . $error->getMessage() . PHP_EOL);
-    fwrite(STDERR, "No automatic database deletion was performed. Preserve any partial data for review.\n");
+    fwrite(STDERR, '安装已停止：' . $error->getMessage() . PHP_EOL);
+    fwrite(STDERR, "未自动删除数据库或表。如遇中途失败，请保留现场检查，勿直接重复安装。\n");
     exit(1);
 }
