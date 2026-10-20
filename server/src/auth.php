@@ -40,40 +40,54 @@ function nav_limit_try(PDO $db, string $key, int $allowed): bool {
     return (int)$stmt->fetchColumn() <= $allowed;
 }
 
-function nav_authenticate(PDO $db, string $email, string $password, string $ip): ?array {
+/**
+ * Authenticate and issue the cookie in one serializable per-user critical
+ * section: password resets/changes use the same nav_users row lock.
+ * Never create a session from an old password verified before a reset.
+ */
+function nav_login(PDO $db, string $email, string $password, string $ip): ?array {
     $normalized = nav_email($email);
     if ($normalized === null || strlen($password) > 1024) return null;
     $ipKey = nav_limit_key('ip', $ip);
     $userKey = nav_limit_key('email', $normalized);
     if (!nav_limit_try($db, $ipKey, 60) || !nav_limit_try($db, $userKey, 10))
         nav_reply(429, ['error'=>'Too many login attempts']);
-    $stmt = $db->prepare("SELECT id,email,role,password_hash FROM nav_users WHERE email=? AND status='active' LIMIT 1");
-    $stmt->execute([$normalized]);
-    $user = $stmt->fetch();
-    if (!$user || !password_verify($password, $user['password_hash'])) return null;
-    if (password_needs_rehash($user['password_hash'], PASSWORD_ARGON2ID))
-        $db->prepare('UPDATE nav_users SET password_hash=? WHERE id=?')
-            ->execute([password_hash($password, PASSWORD_ARGON2ID), $user['id']]);
-    $db->prepare('DELETE FROM nav_login_limits WHERE key_hash IN (?,?)')->execute([$ipKey,$userKey]);
-    unset($user['password_hash']);
-    return $user;
-}
 
-function nav_create_session(PDO $db, int $userId): void {
     $token = bin2hex(random_bytes(32));
     $hash = hash('sha256', $token);
     $expiry = time() + 14 * 86400;
     $db->beginTransaction();
     try {
-        $stmt = $db->prepare('INSERT INTO nav_sessions (user_id, token_hash, expires_at) VALUES (?, ?, ?)');
-        $stmt->execute([$userId, $hash, gmdate('Y-m-d H:i:s', $expiry)]);
-        nav_audit($db, $userId, 'login_success');
+        $stmt = $db->prepare("SELECT id,email,role,password_hash
+            FROM nav_users WHERE email=? AND status='active'
+            LIMIT 1 FOR UPDATE");
+        $stmt->execute([$normalized]);
+        $user = $stmt->fetch();
+        if (!$user || !password_verify($password, $user['password_hash'])) {
+            $db->rollBack();
+            return null;
+        }
+        if (password_needs_rehash($user['password_hash'], PASSWORD_ARGON2ID)) {
+            // The locked owner row is still the credential we just verified.
+            $db->prepare("UPDATE nav_users SET password_hash=?
+                WHERE id=? AND password_hash=?")
+                ->execute([password_hash($password, PASSWORD_ARGON2ID),
+                    $user['id'], $user['password_hash']]);
+        }
+        $db->prepare("INSERT INTO nav_sessions (user_id,token_hash,expires_at)
+            VALUES (?,?,?)")->execute([$user['id'], $hash, gmdate('Y-m-d H:i:s', $expiry)]);
+        nav_audit($db, (int)$user['id'], 'login_success');
+        // Preserve the current success-login attempt-limit reset behavior.
+        $db->prepare('DELETE FROM nav_login_limits WHERE key_hash IN (?,?)')
+            ->execute([$ipKey,$userKey]);
         $db->commit();
     } catch (Throwable $error) {
         if ($db->inTransaction()) $db->rollBack();
         throw $error;
     }
+    unset($user['password_hash']);
     nav_cookie($token, $expiry);
+    return $user;
 }
 
 function nav_session_user(PDO $db): ?array {
