@@ -167,7 +167,17 @@ jobs:
           INSERT INTO nav_login_limits(key_hash,attempts,window_start)
             VALUES (REPEAT('b',64),1,UTC_TIMESTAMP(6));
           SQL
+          # Seed one 91-day audit event and one recent event; cleanup must be selective.
+          MYSQL_PWD=integration_only_password mysql -h 127.0.0.1 -u root nav_ci <<'SQL'
+          INSERT INTO nav_security_events(user_id,event_type,created_at)
+            SELECT id,'login_success',UTC_TIMESTAMP(6) - INTERVAL 91 DAY
+            FROM nav_users WHERE email='owner@example.com';
+          SQL
           php server/scripts/cleanup-sessions.php
+          test "$(MYSQL_PWD=integration_only_password mysql -N -h 127.0.0.1 -u root nav_ci \
+            -e "SELECT COUNT(*) FROM nav_security_events WHERE created_at<UTC_TIMESTAMP(6)-INTERVAL 90 DAY")" = 0
+          test "$(MYSQL_PWD=integration_only_password mysql -N -h 127.0.0.1 -u root nav_ci \
+            -e "SELECT COUNT(*) FROM nav_security_events WHERE event_type='owner_recovery'")" -ge 1
           test "$(MYSQL_PWD=integration_only_password mysql -N -h 127.0.0.1 -u root nav_ci \
             -e "SELECT COUNT(*) FROM nav_sessions WHERE token_hash IN(REPEAT('e',64),REPEAT('d',64))")" = 0
           test "$(MYSQL_PWD=integration_only_password mysql -N -h 127.0.0.1 -u root nav_ci \
