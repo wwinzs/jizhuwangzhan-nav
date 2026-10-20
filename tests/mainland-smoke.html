@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="zh-CN"><head><meta charset="utf-8"><title>v1.8.1 mainland asset smoke</title></head>
+<body data-test-status="pending"><pre id="result">running</pre><iframe id="site" style="width:1000px;height:850px"></iframe>
+<script>
+(async function(){
+  var storageKey='jizhuwangzhan-nav:v1',snapshot=localStorage.getItem(storageKey),frame=document.getElementById('site'),checks=0;
+  function ok(condition,message){checks++;if(!condition)throw Error('FAIL '+message);}
+  function el(id){return frame.contentDocument.getElementById(id);}
+  function data(){return JSON.parse(localStorage.getItem(storageKey));}
+  function wait(){return new Promise(function(resolve){setTimeout(resolve,130);});}
+  function load(){return new Promise(function(resolve,reject){frame.onload=resolve;frame.onerror=reject;frame.src='../index.html?assets='+Date.now()+Math.random();});}
+  try{
+    localStorage.removeItem(storageKey);await load();await wait();
+    ok(el('faviconPolicy')!==null,'icon source setting is available');
+    ok(el('faviconPolicy').value==='local','local-only icon policy defaults on');
+    ok(frame.contentDocument.querySelectorAll('.favicon-img:not(.custom-favicon)').length===0,'default tiles create no remote icon requests');
+    ok(frame.contentDocument.querySelectorAll('.favicon-letter').length>0,'character icons remain displayed');
+    var filenames=['aurora','dusk','ocean','forest','night'];
+    var css=await Promise.all(['../desktop.css','../personalize.css'].map(function(url){return fetch(url).then(function(res){ok(res.ok,url+' served');return res.text();});}));
+    for(var i=0;i<filenames.length;i++){
+      var file='./assets/wallpapers/'+filenames[i]+'.svg';
+      ok(css[0].includes(file),'desktop stylesheet contains local '+filenames[i]);
+      ok(css[1].includes(file),'thumbnail stylesheet contains local '+filenames[i]);
+      var src=await fetch('../assets/wallpapers/'+filenames[i]+'.svg');
+      ok(src.ok,'bundled '+filenames[i]+' served');
+      var svg=await src.text();
+      ok(svg.includes('<svg')&&svg.includes('</svg>'),'bundled '+filenames[i]+' valid vector asset structure');
+    }
+    ok(!css[0].includes('images.unsplash.com')&&!css[1].includes('images.unsplash.com'),'no third party wallpaper requests in CSS');
+    var defaultWallpaper=frame.contentWindow.getComputedStyle(frame.contentDocument.querySelector('.backdrop')).backgroundImage;
+    ok(defaultWallpaper.includes('aurora.svg'),'default wallpaper uses local asset');
+    el('settingsButton').click();
+    el('faviconPolicy').value='origin';
+    el('faviconPolicy').dispatchEvent(new Event('change',{bubbles:true}));
+    await wait();
+    ok(data().settings.faviconPolicy==='origin','direct-site setting persisted');
+    var external=frame.contentDocument.querySelectorAll('.favicon-img:not(.custom-favicon)');
+    ok(external.length>0,'direct-site opt-in creates favicon images');
+    ok(Array.from(external).every(function(img){return img.loading==='lazy';}),'direct-site icons lazy load');
+    ok(Array.from(external).every(function(img){return /^https:\/\/[^/]+\/favicon.ico$/.test(img.src);}), 'direct-site icons resolve only their own domain favicon');
+    ok(Array.from(external).every(function(img){return !img.src.includes('google.com/s2/');}), 'Google favicon proxy no longer called');
+    el('faviconPolicy').value='local';
+    el('faviconPolicy').dispatchEvent(new Event('change',{bubbles:true}));await wait();
+    ok(data().settings.faviconPolicy==='local','local policy persists when restored');
+    ok(frame.contentDocument.querySelectorAll('.favicon-img:not(.custom-favicon)').length===0,'reverting to local removes network icons');
+    var legacy=data();delete legacy.settings.faviconPolicy;
+    localStorage.setItem(storageKey,JSON.stringify(legacy));await load();await wait();
+    ok(el('faviconPolicy').value==='local','existing v1.8 backup defaults to safe local icons');
+    ok(frame.contentDocument.querySelectorAll('.favicon-letter').length>0,'existing user links still render');
+    ok(el('wallpaperButtons').querySelectorAll('button').length===5,'all five wallpaper choices remain');
+    el('settingsButton').click();
+    el('wallpaperButtons').querySelector('[data-wallpaper=forest]').click();await wait();
+    ok(data().settings.wallpaper==='forest','wallpaper selection persists');
+    ok(frame.contentWindow.getComputedStyle(frame.contentDocument.querySelector('.backdrop')).backgroundImage.includes('forest.svg'),'forest wallpaper local asset is active');
+    document.body.dataset.testStatus='PASS';
+    document.getElementById('result').textContent='PASS '+checks+' checks';
+  }catch(err){
+    document.body.dataset.testStatus='FAIL';
+    document.getElementById('result').textContent='FAIL '+checks+' checks '+(err.stack||err);
+  }finally{
+    if(snapshot===null)localStorage.removeItem(storageKey);
+    else localStorage.setItem(storageKey,snapshot);
+  }
+})();
+</script>
+</body></html>
