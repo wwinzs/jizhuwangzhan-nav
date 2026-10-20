@@ -295,9 +295,13 @@ jobs:
             -e "SELECT COUNT(*) FROM nav_reset_mail_queue")" = 0
           php server/tests/reset-mail-end-to-end.php
           php server/scripts/check-reset-mail-queue.php
-          # v1.9.6: no stale queued reset request may produce a fresh email.
+          # v1.9.6: construct a stale encrypted request, then ensure the worker drops it.
           MYSQL_PWD=integration_only_password mysql -h 127.0.0.1 -u root nav_ci \
-            -e "UPDATE nav_reset_mail_queue SET created_at=UTC_TIMESTAMP(6)-INTERVAL 16 MINUTE"
+            -e "INSERT INTO nav_reset_mail_queue(recipient_hash,recipient_cipher,nonce,auth_tag,created_at)
+                VALUES(REPEAT('1',64),X'00',UNHEX(REPEAT('00',12)),UNHEX(REPEAT('00',16)),
+                       UTC_TIMESTAMP(6)-INTERVAL 16 MINUTE)"
+          MYSQL_PWD=integration_only_password mysql -h 127.0.0.1 -u root nav_ci \
+            -e "SELECT COUNT(*) FROM nav_reset_mail_queue WHERE created_at<UTC_TIMESTAMP(6)-INTERVAL 15 MINUTE" | grep -qx '1'
           php server/scripts/process-reset-mail.php
           test "$(MYSQL_PWD=integration_only_password mysql -N -h 127.0.0.1 -u root nav_ci \
             -e "SELECT COUNT(*) FROM nav_reset_mail_queue WHERE created_at<UTC_TIMESTAMP(6)-INTERVAL 15 MINUTE")" = 0
