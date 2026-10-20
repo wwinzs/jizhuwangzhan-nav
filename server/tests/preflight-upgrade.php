@@ -50,6 +50,20 @@ try {
     checkStage($db,'MIGRATION_REQUIRED',2);
     applySql($db,dirname(__DIR__) . '/migrations/003_async_reset_mail.sql');
     checkStage($db,'READY',3);
+    $db->exec('ALTER TABLE nav_sessions DROP INDEX token_hash');
+    $result=nav_check_upgrade_schema($db);
+    if ($result['state']!=='BLOCKED' || $result['reason']!=='missing_unique_index')
+        throw new RuntimeException('Missing bearer token uniqueness was not rejected');
+    $db->exec('ALTER TABLE nav_sessions ADD UNIQUE INDEX token_hash (token_hash)');
+    checkStage($db,'READY',3);
+    $db->exec('ALTER TABLE nav_sessions DROP FOREIGN KEY fk_nav_sessions_user');
+    $result=nav_check_upgrade_schema($db);
+    if ($result['state']!=='BLOCKED' || $result['reason']!=='missing_owner_fk')
+        throw new RuntimeException('Missing cascade owner FK was not rejected');
+    $db->exec('ALTER TABLE nav_sessions ADD CONSTRAINT fk_nav_sessions_user
+        FOREIGN KEY (user_id) REFERENCES nav_users(id) ON DELETE CASCADE');
+    checkStage($db,'READY',3);
+    fwrite(STDOUT,"PASS preflight: unique bearer keys and cascade FK are mandatory.\n");
     $saved=$db->query("SELECT password_hash FROM nav_users WHERE email='ci-owner@example.com'")
         ->fetchColumn();
     if ($saved!==$password || (int)$db->query('SELECT COUNT(*) FROM nav_users')->fetchColumn()!==1)
