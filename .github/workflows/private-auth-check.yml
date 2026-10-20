@@ -324,17 +324,11 @@ jobs:
           cmp /tmp/nav-reset-undelivered /tmp/nav-reset-known
           php server/scripts/process-reset-mail.php
           test "$(MYSQL_PWD=integration_only_password mysql -N -h 127.0.0.1 -u root nav_ci \
-            -e "SELECT attempts FROM nav_reset_mail_queue LIMIT 1")" = 1
+            -e "SELECT COUNT(*) FROM nav_reset_mail_queue")" = 0
           test "$(MYSQL_PWD=integration_only_password mysql -N -h 127.0.0.1 -u root nav_ci \
             -e "SELECT consumed_at IS NOT NULL FROM nav_password_reset_tokens ORDER BY id DESC LIMIT 1")" = 1
-          # CI force-advances only the synthetic job to exercise both retries.
-          for attempts in 2 3; do
-            MYSQL_PWD=integration_only_password mysql -h 127.0.0.1 -u root nav_ci \
-              -e "UPDATE nav_reset_mail_queue SET available_at=UTC_TIMESTAMP(6)-INTERVAL 1 SECOND"
-            php server/scripts/process-reset-mail.php
-          done
-          test "$(MYSQL_PWD=integration_only_password mysql -N -h 127.0.0.1 -u root nav_ci \
-            -e "SELECT COUNT(*) FROM nav_reset_mail_queue")" = 0
+          # No automatic retry after a failed/ambiguous SMTP attempt; no duplicate mail.
+          test ! -e /tmp/nav-smtp-captured.eml
           # The e2e fixture clears preceding login-limit rows before testing
           # credentials, so exercise all four anonymous email attempts here.
           for i in 1 2 3 4; do
