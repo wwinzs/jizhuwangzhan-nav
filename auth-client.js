@@ -218,7 +218,7 @@
       var result = await request('/auth/sessions/revoke-others', {
         method: 'POST',
         headers: {'Content-Type': 'application/json', 'Accept': 'application/json'},
-        body: '{}'
+        body: JSON.stringify({confirm: true})
       });
       if (!result || result.ok !== true || !Number.isInteger(result.revoked_count))
         throw Error('服务端未确认会话已撤销');
