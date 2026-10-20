@@ -316,7 +316,10 @@ jobs:
             "$API/auth/password-reset/confirm")
           test "$CODE" = 400
 
-          # v1.9.2: untrusted SMTP never leaves a usable token.
+          # CI fixture isolation: a previous successful email must not count as a
+          # new message from this failed TLS attempt.
+          sudo rm -f /tmp/nav-smtp-captured.eml
+          # v1.9.9: untrusted SMTP never leaves a usable token, nor retries it.
           sed -i 's@/tmp/nav-smtp-cert.pem@/tmp/nav-unknown-cert.pem@' server/config.local.php
           CODE=$(curl -sS -o /tmp/nav-reset-undelivered -w '%{http_code}' \
             -H "Origin: $ORIGIN" -H 'Content-Type: application/json' \
