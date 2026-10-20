@@ -294,6 +294,7 @@ jobs:
           test "$(MYSQL_PWD=integration_only_password mysql -N -h 127.0.0.1 -u root nav_ci \
             -e "SELECT COUNT(*) FROM nav_reset_mail_queue")" = 0
           php server/tests/reset-mail-end-to-end.php
+          php server/scripts/check-reset-mail-queue.php
           CODE=$(curl -sS -o /tmp/nav-reset-body -w '%{http_code}' \
             -H 'Origin: https://untrusted.example' -H 'Content-Type: application/json' \
             --data '{"email":"owner@example.com"}' "$API/auth/password-reset/request")
