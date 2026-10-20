@@ -11,7 +11,7 @@ function nav_validate_config(array $candidate): array {
         if (!isset($candidate[$name]) || !is_string($candidate[$name]) || $candidate[$name] === '')
             throw new RuntimeException('Missing configuration.');
     }
-    if (!preg_match('/\\A[a-f0-9]{64,}\\z/iD', $candidate['app_key']))
+    if (!preg_match('/\\A[a-f0-9]{64}\\z/iD', $candidate['app_key']))
         throw new RuntimeException('Invalid secret key.');
     $value = $candidate['frontend_origin'];
     if (!preg_match('~\\Ahttps?://(?:[a-z0-9.-]+|\\[[0-9a-f:.]+\\])(?::[0-9]{1,5})?\\z~iD', $value))
