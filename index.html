@@ -2,6 +2,19 @@
 <html lang="zh-CN">
 <head>
   <meta charset="UTF-8">
+  <meta name="referrer" content="no-referrer">
+  <script>
+    // Capture reset fragments before loading any stylesheet or deferred JavaScript.
+    (function () {
+      if (!location.hash.startsWith('#password-reset=')) return;
+      var fragment = location.hash.slice('#password-reset='.length);
+      try {
+        window.__navResetFragment = /^[a-f0-9]{64}$/.test(fragment) ? fragment : null;
+      } finally {
+        history.replaceState(history.state, '', location.pathname + location.search);
+      }
+    })();
+  </script>
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="theme-color" content="#10243d">
   <meta name="description" content="记住网站 · 一个轻盈自由的个人导航主页">
@@ -85,6 +98,27 @@
           <label for="accountPassword">登录密码</label>
           <input id="accountPassword" type="password" required minlength="1" maxlength="1024" autocomplete="current-password" placeholder="输入账号密码">
           <button id="accountLoginSubmit" type="submit" class="primary-btn">登录</button>
+        </form>
+        <button id="accountForgotToggle" class="ghost" type="button" aria-expanded="false" aria-controls="accountForgotForm">忘记密码？</button>
+        <form id="accountForgotForm" class="account-form account-security-form" hidden>
+          <p class="account-local-note">如果邮箱对应可恢复的站长账号，系统会发送一次性重置链接；15 分钟内有效。</p>
+          <label for="accountResetEmail">站长邮箱地址</label>
+          <input id="accountResetEmail" type="email" maxlength="254" required autocomplete="email">
+          <div class="account-security-actions">
+            <button id="accountForgotSubmit" type="submit" class="primary-btn">发送重置邮件</button>
+            <button id="accountForgotCancel" type="button" class="ghost">返回登录</button>
+          </div>
+        </form>
+        <form id="accountResetForm" class="account-form account-security-form" hidden>
+          <p class="account-local-note">已收到重置链接。新密码须为 14–1024 字节。提交成功后所有旧会话都将退出。</p>
+          <label for="accountResetNewPassword">设置新密码</label>
+          <input id="accountResetNewPassword" type="password" maxlength="1024" required autocomplete="new-password">
+          <label for="accountResetConfirmPassword">确认新密码</label>
+          <input id="accountResetConfirmPassword" type="password" maxlength="1024" required autocomplete="new-password">
+          <div class="account-security-actions">
+            <button id="accountResetSubmit" type="submit" class="primary-btn">确认重置密码</button>
+            <button id="accountResetCancel" type="button" class="ghost">取消重置</button>
+          </div>
         </form>
       </div>
       <div id="accountSignedIn" hidden>
