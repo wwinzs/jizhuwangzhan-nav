@@ -76,6 +76,17 @@ function nav_login(PDO $db, string $email, string $password, string $ip): ?array
         }
         $db->prepare("INSERT INTO nav_sessions (user_id,token_hash,expires_at)
             VALUES (?,?,?)")->execute([$user['id'], $hash, gmdate('Y-m-d H:i:s', $expiry)]);
+        // v1.9.22: UI shows at most 50 sessions; enforce the same ceiling in DB.
+        // MySQL 8 materializes the window-function derived table before update.
+        $db->prepare("UPDATE nav_sessions AS s
+            JOIN (
+                SELECT id, ROW_NUMBER() OVER (ORDER BY created_at DESC, id DESC) AS row_num
+                FROM nav_sessions
+                WHERE user_id=? AND revoked_at IS NULL
+                  AND expires_at>UTC_TIMESTAMP(6)
+            ) AS recent ON s.id=recent.id
+            SET s.revoked_at=UTC_TIMESTAMP(6)
+            WHERE recent.row_num>50")->execute([$user['id']]);
         nav_audit($db, (int)$user['id'], 'login_success');
         // Preserve the current success-login attempt-limit reset behavior.
         $db->prepare('DELETE FROM nav_login_limits WHERE key_hash IN (?,?)')
