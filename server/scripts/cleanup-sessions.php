@@ -53,7 +53,7 @@ try {
     $queueDelete->execute();
 
     fwrite(STDOUT, sprintf(
-        "Maintenance complete: removed %d expired/stale sessions, %d expired rate-limit entries, %d old security events, %d stale reset grants.\n",
+        "Maintenance complete: removed %d expired/stale sessions, %d expired rate-limit entries, %d old security events, %d stale reset grants, %d stale mail queue jobs.\n",
         $sessionDelete->rowCount(),
         $limitDelete->rowCount(),
         $auditDelete->rowCount(),
