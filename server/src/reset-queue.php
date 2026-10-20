@@ -67,8 +67,7 @@ function nav_claim_reset_mail(PDO $db): ?array {
             FROM nav_reset_mail_queue
             WHERE created_at>UTC_TIMESTAMP(6) - INTERVAL 15 MINUTE
               AND attempts<3
-              AND ((state='pending' AND available_at<=UTC_TIMESTAMP(6))
-                OR (state='processing' AND lease_until<UTC_TIMESTAMP(6)))
+              AND state='pending' AND available_at<=UTC_TIMESTAMP(6)
             ORDER BY id ASC LIMIT 1 FOR UPDATE SKIP LOCKED");
         $job = $stmt->fetch();
         if (!$job) {
@@ -87,19 +86,15 @@ function nav_claim_reset_mail(PDO $db): ?array {
     }
 }
 
-function nav_finish_reset_mail(PDO $db, int $id, int $claimAttempt, bool $retry): void {
-    if (!$retry) {
-        $db->prepare("DELETE FROM nav_reset_mail_queue WHERE id=? AND state='processing' AND attempts=?")
-            ->execute([$id,$claimAttempt]);
-        return;
-    }
-    // A short bounded exponential backoff: 2min, 10min; then give up on third attempt.
-    $db->prepare("UPDATE nav_reset_mail_queue
-       SET state='pending',lease_until=NULL,
-           available_at=UTC_TIMESTAMP(6) + INTERVAL
-             (CASE WHEN attempts=1 THEN 2 ELSE 10 END) MINUTE
-       WHERE id=? AND state='processing' AND attempts=?")
-       ->execute([$id,$claimAttempt]);
+/**
+ * At-most-once SMTP attempt per queued request.
+ * If a process dies after SMTP accepts a message, delivery is unknowable;
+ * retrying could send a second valid link. Discard instead.
+ */
+function nav_finish_reset_mail(PDO $db, int $id, int $claimAttempt): void {
+    $db->prepare("DELETE FROM nav_reset_mail_queue
+        WHERE id=? AND state='processing' AND attempts=?")
+        ->execute([$id,$claimAttempt]);
 }
 
 /**
@@ -107,6 +102,9 @@ function nav_finish_reset_mail(PDO $db, int $id, int $claimAttempt, bool $retry)
  * Returns false only when no job is ready. No logs include addresses or tokens.
  */
 function nav_process_reset_mail(PDO $db): bool {
+    // v1.9.9: never reclaim a processing task after lease expiration:
+    // SMTP might already have accepted mail, so replay risks duplicate links.
+    // Monitoring detects expired leases; stale task cleanup discards them.
     // v1.9.5: prune jobs whose 15-minute recovery window has elapsed.
     // Do not send new reset links for requests that have already gone stale.
     $db->exec("DELETE FROM nav_reset_mail_queue
@@ -117,7 +115,6 @@ function nav_process_reset_mail(PDO $db): bool {
     $id = (int)$job['id'];
     $attempt = (int)$job['attempts'] + 1;
     $recipient = nav_open_reset_recipient($job);
-    $retry = false;
     if ($recipient !== null) {
         // Only the worker checks ownership, after the HTTP response has completed.
         $stmt = $db->prepare("SELECT id FROM nav_users
@@ -135,12 +132,11 @@ function nav_process_reset_mail(PDO $db): bool {
                 }
                 if (!$delivered) {
                     nav_discard_password_reset_token($db,$token);
-                    $retry = $attempt < 3;
                 }
                 unset($token);
             }
         }
     }
-    nav_finish_reset_mail($db,$id,$attempt,$retry);
+    nav_finish_reset_mail($db,$id,$attempt);
     return true;
 }
