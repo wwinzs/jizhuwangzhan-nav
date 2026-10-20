@@ -281,7 +281,7 @@ function nav_recover_owner_password(PDO $db, string $email, string $newPassword)
  * response, rate limits, and delivery-failure rollback have been implemented.
  * A raw token is returned only to its caller and must never be logged/persisted.
  */
-function nav_issue_password_reset_token(PDO $db, string $email): ?string {
+function nav_issue_password_reset_token(PDO $db, string $email, bool $preserveActive = false): ?string {
     $normalized = nav_email($email);
     if ($normalized === null) return null;
     $token = bin2hex(random_bytes(32));
@@ -295,6 +295,18 @@ function nav_issue_password_reset_token(PDO $db, string $email): ?string {
         if ($userId === false) {
             $db->rollBack();
             return null;
+        }
+        // SMTP workers must preserve a previously mailed and still-valid link.
+        // The owner row lock serializes parallel workers before this test.
+        if ($preserveActive) {
+            $existing = $db->prepare("SELECT id FROM nav_password_reset_tokens
+                WHERE user_id=? AND consumed_at IS NULL
+                  AND expires_at>UTC_TIMESTAMP(6) LIMIT 1");
+            $existing->execute([$userId]);
+            if ($existing->fetchColumn() !== false) {
+                $db->rollBack();
+                return null;
+            }
         }
         // At most one unconsumed grant per owner, even under concurrent issuance.
         $db->prepare("UPDATE nav_password_reset_tokens
