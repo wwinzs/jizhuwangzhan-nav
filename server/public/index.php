@@ -19,7 +19,7 @@ try {
     $secure = !empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off';
     if (($config['require_https'] ?? true) !== false && !$secure)
         nav_reply(400, ['error'=>'HTTPS required']);
-    if ($secure) header('Strict-Transport-Security: max-age=31536000');
+    // HSTS is emitted once by the HTTPS reverse proxy (Nginx), not PHP.
 
     $method = $_SERVER['REQUEST_METHOD'] ?? 'GET';
     $path = parse_url($_SERVER['REQUEST_URI'] ?? '/', PHP_URL_PATH);
