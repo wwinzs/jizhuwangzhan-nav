@@ -1,7 +1,17 @@
 /* v1.9 account UI is invisible unless the auth client is explicitly enabled. */
 .account-entry[hidden],.account-dialog [hidden]{display:none!important}
 .account-entry{font-size:21px;line-height:1}
-.account-dialog{max-width:min(430px,calc(100vw - 24px))}
+/* Keep long account forms inside the viewport instead of clipping the header. */
+.account-dialog{
+  max-width:min(430px,calc(100vw - 24px));
+  max-height:calc(100vh - 24px);
+  max-height:calc(100dvh - 24px);
+  overflow-x:hidden;
+  overflow-y:auto;
+  overscroll-behavior-y:contain;
+  scroll-padding-block:16px;
+  -webkit-overflow-scrolling:touch
+}
 .account-content{padding:25px;display:grid;gap:15px}
 .account-form{display:grid;gap:10px}
 .account-form label{font-size:12px;color:#c9d6f2}
@@ -42,4 +52,20 @@ html[data-theme=light] .account-local-note{color:#3c5270}
 html[data-theme=light] .account-form input{color:#233a58;background:#fff;border-color:#bdcde5}
 html[data-theme=light] .account-message{color:#28644a}
 html[data-theme=light] .account-message.account-error{color:#a43a2b}
-@media(max-width:620px){.account-content{padding:19px}}
+@media(max-width:620px){
+  .account-dialog{
+    max-height:calc(100vh - 16px);
+    max-height:calc(100dvh - 16px)
+  }
+  .account-content{padding:19px}
+  /* Keep the title/close control accessible when a form is taller than the screen. */
+  .account-dialog .dialog-head{
+    position:sticky;
+    top:0;
+    z-index:1;
+    padding:8px 0 10px;
+    background:#16233a
+  }
+  /* Avoid browser zoom on mobile while focusing password and email fields. */
+  .account-form input{font-size:16px}
+}
