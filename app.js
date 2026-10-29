@@ -1184,11 +1184,25 @@
       if(save()){applySettings();toast('壁纸已更换');}
     }catch(err){toast(err.message||'无法处理壁纸文件');}
   }
+  function openSettings(targetId) {
+    var dialog=$('settingsDialog');
+    // Each opening starts from a concise overview; do not persist disclosure state.
+    dialog.querySelectorAll('details.setting-section').forEach(function(section){
+      section.open=false;
+    });
+    dialog.querySelector('.settings-scroll').scrollTop=0;
+    if(targetId){
+      var target=$(targetId);
+      var section=target && target.closest('details.setting-section');
+      if(section)section.open=true;
+    }
+    dialog.showModal();
+  }
   function bind() {
     $('menu').addEventListener('click',openSidebar);
     $('closeSidebar').addEventListener('click',function(){closeMobile(true);});
     $('mobileScrim').addEventListener('click',function(){closeMobile(true);});
-    $('settingsButton').addEventListener('click',function(){hideContext(false);closeMobile(false);$('settingsDialog').showModal();});
+    $('settingsButton').addEventListener('click',function(){hideContext(false);closeMobile(false);openSettings();});
     $('settingsClose').addEventListener('click',function(){ $('settingsDialog').close(); });
     $('layoutEdit').addEventListener('click',startLayoutEdit);
     $('layoutDone').addEventListener('click',finishLayoutEdit);
@@ -1287,7 +1301,7 @@
     });
     $('engine').addEventListener('change',function(){
       if(this.value==='custom' && !validSearchTemplate(state.data.settings.customEngineUrl)){
-        $('settingsDialog').showModal();
+        openSettings('customEngineUrl');
         $('customEngineUrl').focus();$('engineHint').textContent='先保存一个带 %s 的 HTTPS 搜索网址';
         this.value=state.data.settings.engine;return;
       }

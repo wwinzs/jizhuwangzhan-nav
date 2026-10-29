@@ -105,3 +105,50 @@ html[data-theme=light] .dialog .folder-subtitle{color:#59708f}
   .wallpaper-gallery .wallpaper-thumb{height:56px}
 }
 @media(prefers-reduced-motion:reduce){.app .backdrop{transition:none}}
+
+/* Personalization settings: accessible, initially collapsed native disclosures. */
+.settings-dialog details.setting-section{padding:0}
+.settings-dialog .settings-collapse-hint{
+  margin:10px 0 4px;
+  color:#b7c9e8;
+  font-size:12px;
+  line-height:1.6;
+}
+.settings-dialog .setting-summary{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:12px;
+  padding:17px 9px;
+  min-height:48px;
+  cursor:pointer;
+  list-style:none;
+  border-radius:10px;
+}
+.settings-dialog .setting-summary::-webkit-details-marker{display:none}
+.settings-dialog .setting-summary::marker{content:""}
+.settings-dialog .setting-summary h3{font-size:14px;line-height:1.5;margin:0}
+.settings-dialog .setting-summary::after{
+  content:"";
+  flex:none;
+  width:8px;
+  height:8px;
+  border-right:2px solid currentColor;
+  border-bottom:2px solid currentColor;
+  transform:rotate(-45deg);
+  transition:transform .15s ease;
+  color:#aebfe1;
+  margin-right:7px;
+}
+.settings-dialog details[open] > .setting-summary::after{transform:rotate(45deg)}
+.settings-dialog .setting-summary:hover{background:rgba(141,174,255,.11)}
+.settings-dialog .setting-summary:focus-visible{outline:2px solid #8db7ff;outline-offset:-2px}
+.settings-dialog .setting-section-content{padding:0 9px 22px}
+.settings-dialog .setting-section-content > p:first-child{margin-top:0}
+.settings-dialog .setting-section-content > .checkbox-line{margin-top:15px}
+html[data-theme=light] .settings-dialog .settings-collapse-hint{color:#576c8b}
+html[data-theme=light] .settings-dialog .setting-summary::after{color:#546b90}
+html[data-theme=light] .settings-dialog .setting-summary:hover{background:rgba(84,119,195,.09)}
+@media(prefers-reduced-motion:reduce){
+  .settings-dialog .setting-summary::after{transition:none}
+}
