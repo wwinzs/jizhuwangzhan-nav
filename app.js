@@ -579,11 +579,14 @@
     $('folderEditDialog').close();render();toast('文件夹已删除，网站已保留');
   }
   function refreshFolderChoices(selected) {
-    var list=$('linkFolder'), groupId=$('linkGroup').value;
+    var list=$('linkFolder');
     list.replaceChildren();
     var base=node('option','','桌面（不放入文件夹）');base.value='';list.append(base);
-    state.data.folders.filter(function(f){return f.groupId===groupId;}).forEach(function(folder){
-      var option=node('option','',folder.name);option.value=folder.id;list.append(option);
+    // Show all folders with their category, so folders do not appear to vanish.
+    state.data.folders.forEach(function(folder){
+      var group=state.data.groups.find(function(g){return g.id===folder.groupId;});
+      var label=(group ? group.name : '未分类')+' / '+folder.name;
+      var option=node('option','',label);option.value=folder.id;list.append(option);
     });
     list.value=selected && Array.from(list.options).some(function(x){return x.value===selected;}) ? selected:'';
   }
@@ -1228,7 +1231,13 @@
       if(state.data.settings.wallpaper==='custom')state.data.settings.wallpaper='aurora';
       wallpaperRefresh();
     });
+    // Explicit category changes put the site on that category's desktop.
     $('linkGroup').addEventListener('change',function(){refreshFolderChoices(null);});
+    // Choosing a folder is enough: category follows the selected folder automatically.
+    $('linkFolder').addEventListener('change',function(){
+      var folder=state.data.folders.find(function(f){return f.id===this.value;},this);
+      if(folder)$('linkGroup').value=folder.groupId;
+    });
     $('manageAddFolder').addEventListener('click',function(){
       $('settingsDialog').close();changeFolder();
     });
