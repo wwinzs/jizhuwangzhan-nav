@@ -2,6 +2,19 @@
 <html lang="zh-CN">
 <head>
   <meta charset="UTF-8">
+  <meta name="referrer" content="no-referrer">
+  <script>
+    // Capture reset fragments before loading any stylesheet or deferred JavaScript.
+    (function () {
+      if (!location.hash.startsWith('#password-reset=')) return;
+      var fragment = location.hash.slice('#password-reset='.length);
+      try {
+        window.__navResetFragment = /^[a-f0-9]{64}$/.test(fragment) ? fragment : null;
+      } finally {
+        history.replaceState(history.state, '', location.pathname + location.search);
+      }
+    })();
+  </script>
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="theme-color" content="#10243d">
   <meta name="description" content="记住网站 · 一个轻盈自由的个人导航主页">
@@ -13,7 +26,10 @@
   <link rel="stylesheet" href="./layout.css">
   <link rel="stylesheet" href="./personalize.css?v=1.8.1">
   <link rel="stylesheet" href="./data.css?v=1.8.1">
+  <link rel="stylesheet" href="./auth.css">
   <script src="./app.js?v=1.8.1" defer></script>
+  <script src="./account-flags.js" defer></script>
+  <script src="./auth-client.js" defer></script>
 </head>
 <body>
   <div id="app" class="app">
@@ -31,6 +47,7 @@
           <button id="menu" class="icon-button mobile-menu" type="button" aria-label="打开分类" aria-controls="sidebar" aria-expanded="false" title="网站分类">☰</button>
         </div>
         <div class="top-actions">
+          <button id="accountButton" class="top-btn account-entry" type="button" aria-label="账户登录" title="账户" hidden>♙</button>
           <button id="settingsButton" class="top-btn" type="button" aria-label="个性化设置" title="个性化设置">⚙</button>
         </div>
       </header>
@@ -71,6 +88,69 @@
     <button id="contextEdit" type="button" role="menuitem">✎ 编辑网站</button>
     <button id="contextDelete" type="button" role="menuitem" class="context-danger">删除网站</button>
   </div>
+  <dialog id="accountDialog" class="dialog account-dialog" aria-labelledby="accountTitle">
+    <div class="account-content">
+      <div class="dialog-head"><div><small>PRIVATE ACCOUNT</small><h2 id="accountTitle">我的账号</h2></div><button id="accountClose" type="button" class="close" aria-label="关闭账户">×</button></div>
+      <div id="accountSignedOut">
+        <p class="account-explain">登录用于验证身份。当前版本仍只在本机保存收藏、文件夹和壁纸，暂不提供云端同步。</p>
+        <form id="accountLoginForm" class="account-form">
+          <label for="accountEmail">邮箱地址</label>
+          <input id="accountEmail" type="email" required maxlength="254" autocomplete="username" placeholder="owner@example.com">
+          <label for="accountPassword">登录密码</label>
+          <input id="accountPassword" type="password" required minlength="1" maxlength="1024" autocomplete="current-password" placeholder="输入账号密码">
+          <button id="accountLoginSubmit" type="submit" class="primary-btn">登录</button>
+        </form>
+        <button id="accountForgotToggle" class="ghost" type="button" aria-expanded="false" aria-controls="accountForgotForm">忘记密码？</button>
+        <form id="accountForgotForm" class="account-form account-security-form" hidden>
+          <p class="account-local-note">如果邮箱对应可恢复的站长账号，系统会发送一次性重置链接；15 分钟内有效。</p>
+          <label for="accountResetEmail">站长邮箱地址</label>
+          <input id="accountResetEmail" type="email" maxlength="254" required autocomplete="email">
+          <div class="account-security-actions">
+            <button id="accountForgotSubmit" type="submit" class="primary-btn">发送重置邮件</button>
+            <button id="accountForgotCancel" type="button" class="ghost">返回登录</button>
+          </div>
+        </form>
+        <form id="accountResetForm" class="account-form account-security-form" hidden>
+          <p class="account-local-note">已收到重置链接。新密码须为 14–1024 字节。提交成功后所有旧会话都将退出。</p>
+          <label for="accountResetNewPassword">设置新密码</label>
+          <input id="accountResetNewPassword" type="password" maxlength="1024" required autocomplete="new-password">
+          <label for="accountResetConfirmPassword">确认新密码</label>
+          <input id="accountResetConfirmPassword" type="password" maxlength="1024" required autocomplete="new-password">
+          <div class="account-security-actions">
+            <button id="accountResetSubmit" type="submit" class="primary-btn">确认重置密码</button>
+            <button id="accountResetCancel" type="button" class="ghost">取消重置</button>
+          </div>
+        </form>
+      </div>
+      <div id="accountSignedIn" hidden>
+        <p class="account-explain">已登录为 <strong id="accountIdentity"></strong></p>
+        <p class="account-local-note">账号已验证；本地收藏尚未上传，也不会在登录或退出时被清空。</p>
+        <button id="accountChangePasswordToggle" class="ghost" type="button" aria-expanded="false" aria-controls="accountChangePasswordForm">修改登录密码</button>
+        <form id="accountChangePasswordForm" class="account-form account-security-form" hidden>
+          <p class="account-local-note">修改密码后，所有设备的原登录会话都会失效，需要重新登录。本地收藏不会受到影响。</p>
+          <label for="accountCurrentPassword">当前密码</label>
+          <input id="accountCurrentPassword" type="password" required maxlength="1024" autocomplete="current-password">
+          <label for="accountNewPassword">新密码（14–1024 字节）</label>
+          <input id="accountNewPassword" type="password" required maxlength="1024" autocomplete="new-password">
+          <label for="accountConfirmPassword">确认新密码</label>
+          <input id="accountConfirmPassword" type="password" required maxlength="1024" autocomplete="new-password">
+          <div class="account-security-actions">
+            <button id="accountChangePasswordSubmit" type="submit" class="primary-btn">确认修改密码</button>
+            <button id="accountChangePasswordCancel" type="button" class="ghost">取消</button>
+          </div>
+        </form>
+        <button id="accountSessionsToggle" class="ghost" type="button" aria-expanded="false" aria-controls="accountSessionsPanel">管理登录会话</button>
+        <section id="accountSessionsPanel" class="account-session-panel" hidden aria-label="登录会话">
+          <p class="account-local-note">仅显示会话创建时间和到期时间，不采集设备名称、IP 或浏览器指纹。最多显示最近 50 条。</p>
+          <p id="accountSessionsStatus" class="account-local-note" role="status"></p>
+          <ul id="accountSessionsList" class="account-session-list"></ul>
+          <button id="accountRevokeOthers" type="button" class="ghost" disabled>退出其他登录会话</button>
+        </section>
+        <button id="accountLogout" class="ghost" type="button">退出账号</button>
+      </div>
+      <p id="accountMessage" class="account-message" role="status" aria-live="polite"></p>
+    </div>
+  </dialog>
   <div id="storageRecovery" class="storage-recovery" role="alert" hidden>
     <div><strong>本地导航数据需要恢复</strong><p>检测到当前浏览器的导航数据无法读取。为避免覆盖原始内容，已暂停保存。请先下载原始数据，再选择重置。</p></div>
     <div class="recovery-actions"><button id="downloadBrokenData" type="button">下载原始数据</button><button id="resetBrokenData" type="button">重置并重新启用</button></div>
@@ -102,7 +182,7 @@
   </form>
 </dialog>
 <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
-  <dialog id="editDialog" class="dialog"><form id="editForm" class="dialog-inner" method="dialog"><div class="dialog-head"><div><small>QUICK ACCESS</small><h2 id="dialogTitle">添加网站</h2></div><button id="editClose" type="button" class="close">×</button></div><label>网站名称<input id="linkName" required maxlength="40" placeholder="例如：我的博客"></label><label>网站地址<input id="linkUrl" required maxlength="2048" placeholder="https://example.com"></label><div class="two-cols"><label>所属分类<select id="linkGroup"></select></label><label>图标字符<input id="linkIcon" maxlength="4" placeholder="✦"></label></div><label>所在文件夹<select id="linkFolder"><option value="">桌面（不放入文件夹）</option></select></label>
+  <dialog id="editDialog" class="dialog"><form id="editForm" class="dialog-inner" method="dialog"><div class="dialog-head"><div><small>QUICK ACCESS</small><h2 id="dialogTitle">添加网站</h2></div><button id="editClose" type="button" class="close">×</button></div><label>网站名称<input id="linkName" required maxlength="40" placeholder="例如：我的博客"></label><label>网站地址<input id="linkUrl" required maxlength="2048" placeholder="https://example.com"></label><div class="two-cols"><label>所属分类<select id="linkGroup"></select></label><label>图标字符<input id="linkIcon" maxlength="4" placeholder="✦"></label></div><label>所在文件夹<select id="linkFolder"><option value="">桌面（不放入文件夹）</option></select></label><p class="field-hint">可选择任意分类的文件夹，选择后自动匹配分类；手动更换分类则返回桌面。</p>
 <label>图标颜色<input id="linkColor" type="color" value="#708cfc"></label>
 <div class="icon-editor">
   <label>图标来源<select id="linkIconMode"><option value="auto">自动获取网站图标</option><option value="letter">使用字符图标</option><option value="custom">自定义图片</option></select></label>
@@ -113,23 +193,21 @@
   </div>
   <p class="field-hint">支持 PNG、JPG、WebP；图标只保存在当前浏览器与 JSON 备份中。</p>
 </div><label class="checkbox-line"><input id="linkFav" type="checkbox"> 加入我的常用</label><div id="editError" class="form-error" role="alert"></div><div class="dialog-actions"><button id="deleteLink" type="button" class="danger" hidden>删除</button><button id="cancelEdit" type="button" class="ghost">取消</button><button type="submit" class="primary-btn">保存网站</button></div></form></dialog>
-  <dialog id="settingsDialog" class="dialog settings-dialog"><div class="settings-inner"><div class="dialog-head"><div><small>PERSONALIZE YOUR SPACE</small><h2>个性化设置</h2></div><button id="settingsClose" class="close" aria-label="关闭设置">×</button></div><div class="settings-scroll"><section class="setting-section"><h3>☼ 主题外观</h3><p>切换喜欢的桌面主题</p><div id="themeButtons" class="choice-row"><button data-theme="dark" type="button">深色</button><button data-theme="light" type="button">浅色</button></div></section><section class="setting-section"><h3>✧ 桌面壁纸</h3><p>选择一套内置壁纸，或上传自己的图片</p><div id="wallpaperButtons" class="wallpaper-options wallpaper-gallery"><button data-wallpaper="aurora" type="button"><span class="wallpaper-thumb"></span><span>山水蓝</span></button><button data-wallpaper="dusk" type="button"><span class="wallpaper-thumb"></span><span>暖霞</span></button><button data-wallpaper="ocean" type="button"><span class="wallpaper-thumb"></span><span>湖海</span></button><button data-wallpaper="forest" type="button"><span class="wallpaper-thumb"></span><span>森林</span></button><button data-wallpaper="night" type="button"><span class="wallpaper-thumb"></span><span>星夜</span></button></div>
+  <dialog id="settingsDialog" class="dialog settings-dialog"><div class="settings-inner"><div class="dialog-head"><div><small>PERSONALIZE YOUR SPACE</small><h2>个性化设置</h2></div><button id="settingsClose" class="close" aria-label="关闭设置">×</button></div><div class="settings-scroll"><p class="settings-collapse-hint">点击分类标题展开设置，再次点击收起。</p><details class="setting-section"><summary class="setting-summary"><h3>☼ 主题外观</h3></summary><div class="setting-section-content"><p>切换喜欢的桌面主题</p><div id="themeButtons" class="choice-row"><button data-theme="dark" type="button">深色</button><button data-theme="light" type="button">浅色</button></div></div></details><details class="setting-section"><summary class="setting-summary"><h3>✧ 桌面壁纸</h3></summary><div class="setting-section-content"><p>选择一套内置壁纸，或上传自己的图片</p><div id="wallpaperButtons" class="wallpaper-options wallpaper-gallery"><button data-wallpaper="aurora" type="button"><span class="wallpaper-thumb"></span><span>山水蓝</span></button><button data-wallpaper="dusk" type="button"><span class="wallpaper-thumb"></span><span>暖霞</span></button><button data-wallpaper="ocean" type="button"><span class="wallpaper-thumb"></span><span>湖海</span></button><button data-wallpaper="forest" type="button"><span class="wallpaper-thumb"></span><span>森林</span></button><button data-wallpaper="night" type="button"><span class="wallpaper-thumb"></span><span>星夜</span></button></div>
 <div class="wallpaper-upload-actions">
   <label class="upload-btn">↑ 上传壁纸（≤2 MB）<input id="wallpaperUpload" type="file" accept="image/png,image/jpeg,image/webp" hidden></label>
   <button id="wallpaperRestore" type="button" class="ghost">移除自定义壁纸</button>
 </div>
 <div class="wallpaper-tuning"><label for="wallpaperDim">壁纸亮度 <output id="wallpaperDimValue" for="wallpaperDim">80%</output></label><input id="wallpaperDim" type="range" min="0" max="55" step="5" value="20">
-<label for="wallpaperBlur">壁纸模糊 <output id="wallpaperBlurValue" for="wallpaperBlur">0px</output></label><input id="wallpaperBlur" type="range" min="0" max="8" step="1" value="0"></div></section><section class="setting-section">
-  <h3>⌕ 搜索与地址栏</h3>
+<label for="wallpaperBlur">壁纸模糊 <output id="wallpaperBlurValue" for="wallpaperBlur">0px</output></label><input id="wallpaperBlur" type="range" min="0" max="8" step="1" value="0"></div></div></details><details class="setting-section"><summary class="setting-summary"><h3>⌕ 搜索与地址栏</h3></summary><div class="setting-section-content">
   <p>支持直接输入网站地址、切换搜索引擎，或自定义 HTTPS 搜索网址。</p>
   <label class="custom-engine-setting">自定义搜索网址（包含 %s）
     <input id="customEngineUrl" type="text" maxlength="512" placeholder="https://www.example.com/search?q=%s" spellcheck="false" autocomplete="off">
   </label>
   <button id="customEngineSave" class="ghost" type="button">保存自定义搜索引擎</button>
   <p id="engineHint" class="field-hint">例如：https://www.ecosia.org/search?q=%s</p>
-</section>
-<section class="setting-section">
-  <h3>◉ 图标加载与国内访问</h3>
+</div></details>
+<details class="setting-section"><summary class="setting-summary"><h3>◉ 图标加载与国内访问</h3></summary><div class="setting-section-content">
   <p>默认使用本地字符图标，避免打开主页时连接 Google 等第三方图片服务。</p>
   <label class="favicon-policy-label">网站图标显示方式
     <select id="faviconPolicy">
@@ -138,8 +216,8 @@
     </select>
   </label>
   <p class="field-hint">开启原网站图标后，浏览器会直接请求收藏网站的 /favicon.ico；部分网站可能无法访问或图标不存在，届时自动使用字符图标。已上传的自定义图标不受影响。</p>
-</section>
-<section class="setting-section"><h3>▦ 桌面显示</h3>
+</div></details>
+<details class="setting-section"><summary class="setting-summary"><h3>▦ 桌面显示</h3></summary><div class="setting-section-content">
   <label class="checkbox-line"><input id="showWidgets" type="checkbox" checked> 显示桌面小组件</label>
   <label class="checkbox-line"><input id="compact" type="checkbox"> 紧凑排列图标</label>
   <div class="setting-actions-row">
@@ -147,8 +225,7 @@
     <button id="sortMode" type="button" class="ghost mode-switch" title="拖动图标排序">⇅ 图标排序</button>
   </div>
   <p>使用右键、Shift + F10 或在手机上长按图标，可以编辑、收藏和删除网站。</p>
-</section><section class="setting-section">
-  <h3>◫ 桌面布局</h3>
+</div></details><details class="setting-section"><summary class="setting-summary"><h3>◫ 桌面布局</h3></summary><div class="setting-section-content">
   <p>可以自由安排图标位置并保留空位；手机使用紧凑布局，避免小屏幕出现大块留白。</p>
   <div class="settings-actions layout-setting-actions">
     <button id="layoutEdit" type="button" class="ghost">◫ 开始自由排列</button>
@@ -160,9 +237,8 @@
     <select id="widgetPlacement"><option value="below">网站图标下方</option><option value="above">搜索框下方</option></select>
   </label>
   <div id="widgetManager" class="widget-manager"></div>
-</section>
-<section class="setting-section"><h3>⚙ 分类管理</h3><div id="groupManager"></div><button id="manageAddGroup" class="ghost">＋ 新增分类</button></section><section class="setting-section"><h3>▤ 网站文件夹</h3><p>集中整理常用网站；删除文件夹不会删除里面的网站。</p><div id="folderManager"></div><button id="manageAddFolder" type="button" class="ghost">＋ 新建文件夹</button></section><section class="setting-section">
-  <h3>⇪ 数据管理与备份</h3>
+</div></details>
+<details class="setting-section"><summary class="setting-summary"><h3>⚙ 分类管理</h3></summary><div class="setting-section-content"><div id="groupManager"></div><button id="manageAddGroup" class="ghost">＋ 新增分类</button></div></details><details class="setting-section"><summary class="setting-summary"><h3>▤ 网站文件夹</h3></summary><div class="setting-section-content"><p>集中整理常用网站；删除文件夹不会删除里面的网站。</p><div id="folderManager"></div><button id="manageAddFolder" type="button" class="ghost">＋ 新建文件夹</button></div></details><details class="setting-section"><summary class="setting-summary"><h3>⇪ 数据管理与备份</h3></summary><div class="setting-section-content">
   <p>数据只保存在当前浏览器。请定期下载完整 JSON 备份，更换浏览器或清理缓存前尤其重要。</p>
   <div id="storageMeter" class="storage-meter" role="status" aria-live="polite">正在统计本地数据…</div>
   <div class="settings-actions data-actions">
@@ -172,6 +248,6 @@
   </div>
   <p id="bookmarkSummary" class="field-hint" aria-live="polite">支持 Chrome、Edge、Firefox 等浏览器导出的书签 HTML。导入时自动去重，原收藏不会覆盖。</p>
   <button id="reset" class="reset-btn" type="button">恢复全部默认设置</button>
-</section></div></div></dialog>
+</div></details></div></div></dialog>
 </body>
 </html>

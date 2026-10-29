@@ -57,9 +57,22 @@
    movedOutLink.dispatchEvent(new MouseEvent('contextmenu',{bubbles:true,cancelable:true,clientX:80,clientY:80}));
    get('contextEdit').click();
    check(get('editDialog').open,'desktop website editor opens');
+   // A folder must remain discoverable from another selected category.
+   get('linkGroup').value=data().groups[1].id;
+   get('linkGroup').dispatchEvent(new Event('change',{bubbles:true}));
+   var crossGroupChoice=Array.from(get('linkFolder').options).find(function(o){return o.value===data().folders[0].id;});
+   check(!!crossGroupChoice,'folder from another category is visible in the editor');
+   check(crossGroupChoice.textContent.includes(data().groups[0].name),'folder choice includes its category name');
    get('linkFolder').value=data().folders[0].id;
+   get('linkFolder').dispatchEvent(new Event('change',{bubbles:true}));
+   check(get('linkGroup').value===data().folders[0].groupId,'choosing folder updates site category automatically');
+   get('linkGroup').value=data().groups[1].id;
+   get('linkGroup').dispatchEvent(new Event('change',{bubbles:true}));
+   check(get('linkFolder').value==='','manually choosing another category returns site to desktop');
+   get('linkFolder').value=data().folders[0].id;
+   get('linkFolder').dispatchEvent(new Event('change',{bubbles:true}));
    submit('editForm');
-   check(data().links.some(function(l){return l.name===releasedName&&l.folderId===data().folders[0].id;}),'link editor can move a desktop site into a folder');
+   check(data().links.some(function(l){return l.name===releasedName&&l.folderId===data().folders[0].id&&l.groupId===data().folders[0].groupId;}),'link editor moves site into chosen folder and category');
    folderTile().click();
    check(members().length===2,'site moved through editor appears in folder');
    get('folderManage').click();

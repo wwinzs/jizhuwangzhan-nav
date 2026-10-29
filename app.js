@@ -579,11 +579,14 @@
     $('folderEditDialog').close();render();toast('文件夹已删除，网站已保留');
   }
   function refreshFolderChoices(selected) {
-    var list=$('linkFolder'), groupId=$('linkGroup').value;
+    var list=$('linkFolder');
     list.replaceChildren();
     var base=node('option','','桌面（不放入文件夹）');base.value='';list.append(base);
-    state.data.folders.filter(function(f){return f.groupId===groupId;}).forEach(function(folder){
-      var option=node('option','',folder.name);option.value=folder.id;list.append(option);
+    // Show all folders with their category, so folders do not appear to vanish.
+    state.data.folders.forEach(function(folder){
+      var group=state.data.groups.find(function(g){return g.id===folder.groupId;});
+      var label=(group ? group.name : '未分类')+' / '+folder.name;
+      var option=node('option','',label);option.value=folder.id;list.append(option);
     });
     list.value=selected && Array.from(list.options).some(function(x){return x.value===selected;}) ? selected:'';
   }
@@ -1181,11 +1184,25 @@
       if(save()){applySettings();toast('壁纸已更换');}
     }catch(err){toast(err.message||'无法处理壁纸文件');}
   }
+  function openSettings(targetId) {
+    var dialog=$('settingsDialog');
+    // Each opening starts from a concise overview; do not persist disclosure state.
+    dialog.querySelectorAll('details.setting-section').forEach(function(section){
+      section.open=false;
+    });
+    dialog.querySelector('.settings-scroll').scrollTop=0;
+    if(targetId){
+      var target=$(targetId);
+      var section=target && target.closest('details.setting-section');
+      if(section)section.open=true;
+    }
+    dialog.showModal();
+  }
   function bind() {
     $('menu').addEventListener('click',openSidebar);
     $('closeSidebar').addEventListener('click',function(){closeMobile(true);});
     $('mobileScrim').addEventListener('click',function(){closeMobile(true);});
-    $('settingsButton').addEventListener('click',function(){hideContext(false);closeMobile(false);$('settingsDialog').showModal();});
+    $('settingsButton').addEventListener('click',function(){hideContext(false);closeMobile(false);openSettings();});
     $('settingsClose').addEventListener('click',function(){ $('settingsDialog').close(); });
     $('layoutEdit').addEventListener('click',startLayoutEdit);
     $('layoutDone').addEventListener('click',finishLayoutEdit);
@@ -1228,7 +1245,13 @@
       if(state.data.settings.wallpaper==='custom')state.data.settings.wallpaper='aurora';
       wallpaperRefresh();
     });
+    // Explicit category changes put the site on that category's desktop.
     $('linkGroup').addEventListener('change',function(){refreshFolderChoices(null);});
+    // Choosing a folder is enough: category follows the selected folder automatically.
+    $('linkFolder').addEventListener('change',function(){
+      var folder=state.data.folders.find(function(f){return f.id===this.value;},this);
+      if(folder)$('linkGroup').value=folder.groupId;
+    });
     $('manageAddFolder').addEventListener('click',function(){
       $('settingsDialog').close();changeFolder();
     });
@@ -1278,7 +1301,7 @@
     });
     $('engine').addEventListener('change',function(){
       if(this.value==='custom' && !validSearchTemplate(state.data.settings.customEngineUrl)){
-        $('settingsDialog').showModal();
+        openSettings('customEngineUrl');
         $('customEngineUrl').focus();$('engineHint').textContent='先保存一个带 %s 的 HTTPS 搜索网址';
         this.value=state.data.settings.engine;return;
       }

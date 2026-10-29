@@ -1,0 +1,98 @@
+name: Package v1.9 Baota Draft API
+on:
+  pull_request:
+    paths:
+      - 'server/**'
+      - '.github/workflows/package-private-auth.yml'
+  push:
+    branches:
+      - 'feat/v1-9-private-auth-backend'
+    paths:
+      - 'server/**'
+      - '.github/workflows/package-private-auth.yml'
+jobs:
+  package-backend:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate and package
+        run: |
+          set -eu
+          for file in server/src/*.php server/public/*.php server/scripts/*.php; do php -l "$file"; done
+          bash -n server/scripts/check-auth-baota.sh
+          bash -n server/scripts/check-edge-readonly.sh
+          test -s server/DEPLOY_BAOTA.md
+          test -s server/RELEASE_GATES_V19.md
+          test -s server/scripts/preflight-upgrade.php
+          test -s server/scripts/preflight-worker.php
+          test -s server/src/sql-migrations.php
+          test -s server/migrations/001_security_events.sql
+          test -s server/migrations/002_password_reset_tokens.sql
+          test -s server/src/mail.php
+          test -s server/src/reset-queue.php
+          test -s server/scripts/process-reset-mail.php
+          test -s server/scripts/check-reset-mail-queue.php
+          test -s server/migrations/003_async_reset_mail.sql
+          test -s server/scripts/recover-owner.php
+          test ! -e server/config.local.php
+          # v1.9.21: explicit source allowlist, not a recursive copy of the repository.
+          # A newly added private file, .env, backup or test fixture cannot leak.
+          package_files=(
+            server/DEPLOY_BAOTA.md
+            server/README.md
+            server/RELEASE_GATES_V19.md
+            server/config.local.example.php
+            server/migrations/001_security_events.sql
+            server/migrations/002_password_reset_tokens.sql
+            server/migrations/003_async_reset_mail.sql
+            server/public/index.php
+            server/schema.sql
+            server/scripts/check-auth-baota.sh
+            server/scripts/check-edge-readonly.sh
+            server/scripts/check-reset-mail-queue.php
+            server/scripts/cleanup-sessions.php
+            server/scripts/create-owner.php
+            server/scripts/install-baota.php
+            server/scripts/preflight-upgrade.php
+            server/scripts/preflight-worker.php
+            server/scripts/process-reset-mail.php
+            server/scripts/recover-owner.php
+            server/src/auth.php
+            server/src/bootstrap.php
+            server/src/mail.php
+            server/src/reset-queue.php
+            server/src/sql-migrations.php
+          )
+          printf 'CI_ONLY_NONSECRET_SENTINEL\n' > server/.env
+          for path in "${package_files[@]}"; do
+            test -f "$path"
+            test ! -L "$path"
+          done
+          zip -X -q nav-v1.9-api-baota-draft.zip "${package_files[@]}"
+          unzip -tq nav-v1.9-api-baota-draft.zip
+          printf '%s\n' "${package_files[@]}" | LC_ALL=C sort > /tmp/nav-expected-package-files
+          unzip -Z -1 nav-v1.9-api-baota-draft.zip | LC_ALL=C sort > /tmp/nav-actual-package-files
+          diff -u /tmp/nav-expected-package-files /tmp/nav-actual-package-files
+          ! grep -Eq '(^|/)(\.env|config\.local\.php|[^/]*\.bak)$|^server/tests/|^server/runtime/' /tmp/nav-actual-package-files
+          unzip -Z -1 nav-v1.9-api-baota-draft.zip | grep -Fx 'server/migrations/001_security_events.sql'
+          unzip -Z -1 nav-v1.9-api-baota-draft.zip | grep -Fx 'server/migrations/002_password_reset_tokens.sql'
+          unzip -Z -1 nav-v1.9-api-baota-draft.zip | grep -Fx 'server/src/mail.php'
+          unzip -Z -1 nav-v1.9-api-baota-draft.zip | grep -Fx 'server/migrations/003_async_reset_mail.sql'
+          unzip -Z -1 nav-v1.9-api-baota-draft.zip | grep -Fx 'server/scripts/process-reset-mail.php'
+          unzip -Z -1 nav-v1.9-api-baota-draft.zip | grep -Fx 'server/scripts/check-reset-mail-queue.php'
+          unzip -Z -1 nav-v1.9-api-baota-draft.zip | grep -Fx 'server/scripts/recover-owner.php'
+          unzip -Z -1 nav-v1.9-api-baota-draft.zip | grep -Fx 'server/scripts/check-auth-baota.sh'
+          unzip -Z -1 nav-v1.9-api-baota-draft.zip | grep -Fx 'server/scripts/check-edge-readonly.sh'
+          unzip -Z -1 nav-v1.9-api-baota-draft.zip | grep -Fx 'server/scripts/preflight-upgrade.php'
+          unzip -Z -1 nav-v1.9-api-baota-draft.zip | grep -Fx 'server/scripts/preflight-worker.php'
+          unzip -Z -1 nav-v1.9-api-baota-draft.zip | grep -Fx 'server/src/sql-migrations.php'
+          unzip -Z -1 nav-v1.9-api-baota-draft.zip | grep -Fx 'server/RELEASE_GATES_V19.md'
+          ! unzip -Z -1 nav-v1.9-api-baota-draft.zip | grep -Eq '(^|/)config\.local\.php$'
+          sha256sum nav-v1.9-api-baota-draft.zip > nav-v1.9-api-baota-draft.sha256
+      - uses: actions/upload-artifact@v4
+        with:
+          name: v19-baota-server-draft
+          path: |
+            nav-v1.9-api-baota-draft.zip
+            nav-v1.9-api-baota-draft.sha256
+          retention-days: 14

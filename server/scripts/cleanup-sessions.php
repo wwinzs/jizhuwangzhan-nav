@@ -1,0 +1,67 @@
+<?php
+declare(strict_types=1);
+// Run manually or from a dedicated maintenance timer. CLI only; no HTTP entrypoint.
+if (PHP_SAPI !== 'cli') {
+    http_response_code(404);
+    exit;
+}
+require_once dirname(__DIR__) . '/src/bootstrap.php';
+
+try {
+    $db = nav_db();
+    // A bounded batch prevents a maintenance job from holding large table locks.
+    $sessionDelete = $db->prepare(
+        "DELETE FROM nav_sessions
+         WHERE expires_at <= UTC_TIMESTAMP(6)
+            OR (revoked_at IS NOT NULL
+                AND revoked_at < UTC_TIMESTAMP(6) - INTERVAL 30 DAY)
+         ORDER BY id LIMIT 500"
+    );
+    $sessionDelete->execute();
+
+    $limitDelete = $db->prepare(
+        "DELETE FROM nav_login_limits
+         WHERE window_start < UTC_TIMESTAMP(6) - INTERVAL 1 DAY
+         ORDER BY window_start LIMIT 500"
+    );
+    $limitDelete->execute();
+
+    // Retain only 90 days of privacy-minimal audit events, in bounded batches.
+    $auditDelete = $db->prepare(
+        "DELETE FROM nav_security_events
+         WHERE created_at < UTC_TIMESTAMP(6) - INTERVAL 90 DAY
+         ORDER BY created_at, id LIMIT 500"
+    );
+    $auditDelete->execute();
+
+    // Expired or consumed grants are never needed beyond 24 hours.
+    // Live unconsumed grants remain usable for their full 15-minute TTL.
+    $resetDelete = $db->prepare(
+        "DELETE FROM nav_password_reset_tokens
+         WHERE expires_at < UTC_TIMESTAMP(6) - INTERVAL 1 DAY
+            OR (consumed_at IS NOT NULL AND consumed_at < UTC_TIMESTAMP(6) - INTERVAL 1 DAY)
+         ORDER BY id LIMIT 500"
+    );
+    $resetDelete->execute();
+
+    // Remove stuck/stale queue items only after 24 hours, in a bounded batch.
+    $queueDelete = $db->prepare(
+        "DELETE FROM nav_reset_mail_queue
+         WHERE created_at < UTC_TIMESTAMP(6) - INTERVAL 1 DAY
+         ORDER BY id LIMIT 500"
+    );
+    $queueDelete->execute();
+
+    fwrite(STDOUT, sprintf(
+        "Maintenance complete: removed %d expired/stale sessions, %d expired rate-limit entries, %d old security events, %d stale reset grants, %d stale mail queue jobs.\n",
+        $sessionDelete->rowCount(),
+        $limitDelete->rowCount(),
+        $auditDelete->rowCount(),
+        $resetDelete->rowCount(),
+        $queueDelete->rowCount()
+    ));
+} catch (Throwable $error) {
+    // Avoid logging credentials, DSNs or SQL driver exception details.
+    fwrite(STDERR, "Maintenance failed; inspect private server logs.\n");
+    exit(1);
+}
